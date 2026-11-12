@@ -1,63 +1,72 @@
 import './index.css';
 
-import { navigateTo } from '@devvit/web/client';
-import { context, requestExpandedMode } from '@devvit/web/client';
-import { StrictMode } from 'react';
+import { requestExpandedMode } from '@devvit/web/client';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-export const Splash = () => {
+type Info = {
+  day: number;
+  humans: number;
+  played: boolean;
+  streak: number;
+  uses: number;
+  ghost: { user: string };
+};
+
+const css = `
+body{margin:0;background:#14161c;color:#ece8df;font-family:system-ui,sans-serif}
+.s{min-height:100vh;box-sizing:border-box;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.pair{display:flex;align-items:center;gap:0}
+.d{width:22px;height:22px;border-radius:50%}
+.l{width:54px;border-top:3px dashed #5b6278}
+h1{margin:0;font-size:28px;letter-spacing:.5px}
+.sub{font-size:14px;opacity:.75;max-width:280px;line-height:1.4}
+.row{display:flex;gap:18px;font-size:13px}
+.row b{display:block;font-size:20px;color:#f2b84b}
+.go{background:#f2b84b;color:#14161c;border:0;border-radius:999px;padding:12px 28px;font-size:16px;font-weight:700;cursor:pointer}
+`;
+
+function Splash() {
+  const [info, setInfo] = useState<Info | null>(null);
+  useEffect(() => {
+    fetch('/api/state')
+      .then((r) => r.json())
+      .then(setInfo)
+      .catch(() => setInfo(null));
+  }, []);
+
+  const partner = info ? (info.ghost.user === 'bot' ? 'a bot' : `u/${info.ghost.user}`) : '';
+
   return (
-    <div className="flex relative flex-col justify-center items-center min-h-screen gap-4 bg-white dark:bg-gray-900">
-      <img
-        className="object-contain w-1/2 max-w-[250px] mx-auto"
-        src="/snoo.png"
-        alt="Snoo"
-      />
-      <div className="flex flex-col items-center gap-2">
-        <h1 className="text-2xl font-bold text-center text-gray-900 dark:text-white">
-          Hey {context.username ?? 'user'} 👋
-        </h1>
-        <p className="text-base text-center text-gray-600 dark:text-gray-300">
-          Edit{' '}
-          <span className="bg-[#e5ebee] dark:bg-gray-700 px-1 py-0.5 rounded">
-            src/client/splash.tsx
-          </span>{' '}
-          to get started.
-        </p>
+    <div className="s">
+      <div className="pair">
+        <div className="d" style={{ background: '#f2b84b' }} />
+        <div className="l" />
+        <div className="d" style={{ background: '#4fc3b5', opacity: 0.75 }} />
       </div>
-      <div className="flex items-center justify-center mt-5">
-        <button
-          className="flex items-center justify-center bg-[#d93900] dark:bg-orange-600 text-white w-auto h-10 rounded-full cursor-pointer transition-colors px-4 hover:bg-[#c23300] dark:hover:bg-orange-700"
-          onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}
-        >
-          Tap to Start
-        </button>
+      <h1>Yestermate</h1>
+      <div className="sub">
+        {info
+          ? `Today your partner is ${partner}. Their moves are fixed. Time yours to fit.`
+          : 'Solve a small puzzle with a stranger from yesterday.'}
       </div>
-      <footer className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3 text-[0.8em] text-gray-600 dark:text-gray-400">
-        <button
-          className="cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://developers.reddit.com/docs')}
-        >
-          Docs
-        </button>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
-        <button
-          className="cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://www.reddit.com/r/Devvit')}
-        >
-          r/Devvit
-        </button>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
-        <button
-          className="cursor-pointer hover:text-gray-900 dark:hover:text-white transition-colors"
-          onClick={() => navigateTo('https://discord.com/invite/R7yu2wh9Qz')}
-        >
-          Discord
-        </button>
-      </footer>
+      {info && (
+        <div className="row">
+          <span><b>{info.humans}</b>in today's chain</span>
+          <span><b>{info.streak}</b>day streak</span>
+          <span><b>{info.uses}</b>used your runs</span>
+        </div>
+      )}
+      <button className="go" onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}>
+        {info?.played ? 'Play again' : "Play today's level"}
+      </button>
     </div>
   );
-};
+}
+
+const style = document.createElement('style');
+style.textContent = css;
+document.head.appendChild(style);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
