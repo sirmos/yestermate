@@ -11,24 +11,6 @@ export const MAX_TICKS = 90;
 const DX = [0, 0, 0, -1, 1];
 const DY = [0, -1, 1, 0, 0];
 
-// A, B = spawns. g = goal for A. h = goal for B.
-// x, y = plates. X, Y = doors (open while their plate has someone on it).
-export const LEVELS: string[][] = [
-  [
-    '#########',
-    '#A..X..g#',
-    '#Bxh#...#',
-    '#########',
-  ],
-  [
-    '#########',
-    '#AxX..yh#',
-    '#B.#....#',
-    '#..Y...g#',
-    '#########',
-  ],
-];
-
 export function parse(rows: string[]): Level {
   const f: Record<string, P> = {};
   const cells = rows.map((r, y) =>
@@ -46,26 +28,22 @@ export function parse(rows: string[]): Level {
   return { cells, a: f.A, b: f.B, ga: f.g, gb: f.h };
 }
 
-export function levelForDay(dayIndex: number): Level {
-  return parse(LEVELS[dayIndex % LEVELS.length]);
-}
-
 const at = (l: Level, p: P) => l.cells[p.y]?.[p.x] ?? '#';
 
-function passable(l: Level, s: S, x: number, y: number): boolean {
+function passable(l: Level, s: S, x: number, y: number, mover: 'a' | 'b'): boolean {
   const c = at(l, { x, y });
   if (c === '#') return false;
   if (c === 'X' || c === 'Y') {
     const plate = c.toLowerCase();
-    return at(l, s.a) === plate || at(l, s.b) === plate;
+    return at(l, mover === 'a' ? s.b : s.a) === plate;
   }
   return true;
 }
 
-function move(l: Level, s: S, p: P, m: number, done: boolean): P {
+function move(l: Level, s: S, p: P, m: number, done: boolean, mover: 'a' | 'b'): P {
   if (done || m === 0) return p;
   const n = { x: p.x + DX[m], y: p.y + DY[m] };
-  return passable(l, s, n.x, n.y) ? n : p;
+  return passable(l, s, n.x, n.y, mover) ? n : p;
 }
 
 export function start(l: Level): S {
@@ -73,8 +51,8 @@ export function start(l: Level): S {
 }
 
 export function step(l: Level, s: S, ma: number, mb: number): S {
-  const a = move(l, s, s.a, ma, s.da);
-  const b = move(l, s, s.b, mb, s.db);
+  const a = move(l, s, s.a, ma, s.da, 'a');
+  const b = move(l, s, s.b, mb, s.db, 'b');
   return {
     a,
     b,

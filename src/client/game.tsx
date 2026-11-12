@@ -95,10 +95,12 @@ function Game({ st }: { st: St }) {
       .catch(() => setRes({ humans: st.humans, streak: st.streak, practice: true }));
   }, [finished]);
 
-  const open = (door: string) => {
+  const cellAt = (p: { x: number; y: number }) => level.cells[p.y][p.x];
+  const doorOpacity = (door: string) => {
     const plate = door.toLowerCase();
-    const at = (p: { x: number; y: number }) => level.cells[p.y][p.x];
-    return at(sim.a) === plate || at(sim.b) === plate;
+    if (cellAt(pt) === plate) return 0.15;
+    if (cellAt(me) === plate) return 0.5;
+    return 1;
   };
 
   const w = level.cells[0].length;
@@ -118,7 +120,7 @@ function Game({ st }: { st: St }) {
               <div key={`${x}-${y}`} className={ch === '#' ? 'c wall' : 'c'}>
                 {(ch === 'x' || ch === 'y') && <div className="dot" style={{ background: col, opacity: 0.5 }} />}
                 {door && (
-                  <div className="bar" style={{ background: col, opacity: open(ch) ? 0.15 : 1 }} />
+                  <div className="bar" style={{ background: col, opacity: doorOpacity(ch) }} />
                 )}
                 {x === myGoal.x && y === myGoal.y && <div className="goal" style={{ borderColor: ME }} />}
                 {x === ptGoal.x && y === ptGoal.y && <div className="goal" style={{ borderColor: PARTNER }} />}
@@ -135,7 +137,7 @@ function Game({ st }: { st: St }) {
           <div className="hint">
             {moves.length === 0
               ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user}, and their moves are fixed. Time yours to fit.`
-              : 'Stand on a plate to open the matching door. Wait with the middle button.'}
+              : 'A door opens only while your partner stands on its plate. Hold theirs the same way.'}
           </div>
           <div className="pad">
             <span />

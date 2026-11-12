@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { reddit, redis } from '@devvit/web/server';
-import { LEVELS, levelForDay, solve, validate, type Role } from '../../shared/sim';
+import { parse, solve, validate, type Role } from '../../shared/sim';
+import { LEVELS } from '../../shared/levels';
+
+const levelForDay = (d: number) => parse(LEVELS[d % LEVELS.length]!);
 
 export const api = new Hono();
 
@@ -41,7 +44,7 @@ api.get('/state', async (c) => {
   const top = await redis.zRange('board:uses', 0, 9, { by: 'rank', reverse: true });
   return c.json({
     day,
-    rows: LEVELS[day % LEVELS.length],
+    rows: LEVELS[day % LEVELS.length]!,
     role,
     ghost: { id: chain.head.id, moves: chain.head.moves, user: chain.head.user },
     humans: chain.humans,
