@@ -93,9 +93,11 @@ function Game({ st }: { st: St }) {
       .then((r) => r.json())
       .then((j) => setRes(j))
       .catch(() => setRes({ humans: st.humans, streak: st.streak, practice: true }));
+    // Only send once, when the level is finished.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished]);
 
-  const cellAt = (p: { x: number; y: number }) => level.cells[p.y][p.x];
+  const cellAt = (p: { x: number; y: number }) => level.cells[p.y]![p.x]!;
   const doorOpacity = (door: string) => {
     const plate = door.toLowerCase();
     if (cellAt(pt) === plate) return 0.15;
@@ -103,7 +105,7 @@ function Game({ st }: { st: St }) {
     return 1;
   };
 
-  const w = level.cells[0].length;
+  const w = level.cells[0]!.length;
   return (
     <div className="w">
       <div className="top">
@@ -180,7 +182,10 @@ function Game({ st }: { st: St }) {
 function App() {
   const [st, setSt] = useState<St | null>(null);
   useEffect(() => {
-    fetch('/api/state').then((r) => r.json()).then(setSt);
+    fetch('/api/state')
+      .then((r) => r.json())
+      .then(setSt)
+      .catch(() => undefined);
   }, []);
   if (!st) return <div className="w">Loading...</div>;
   return <Game st={st} />;

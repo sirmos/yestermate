@@ -25,7 +25,7 @@ export function parse(rows: string[]): Level {
       })
       .join('')
   );
-  return { cells, a: f.A, b: f.B, ga: f.g, gb: f.h };
+  return { cells, a: f.A!, b: f.B!, ga: f.g!, gb: f.h! };
 }
 
 const at = (l: Level, p: P) => l.cells[p.y]?.[p.x] ?? '#';
@@ -42,7 +42,7 @@ function passable(l: Level, s: S, x: number, y: number, mover: 'a' | 'b'): boole
 
 function move(l: Level, s: S, p: P, m: number, done: boolean, mover: 'a' | 'b'): P {
   if (done || m === 0) return p;
-  const n = { x: p.x + DX[m], y: p.y + DY[m] };
+  const n = { x: p.x + DX[m]!, y: p.y + DY[m]! };
   return passable(l, s, n.x, n.y, mover) ? n : p;
 }
 
