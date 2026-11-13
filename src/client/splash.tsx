@@ -3,9 +3,12 @@ import './index.css';
 import { requestExpandedMode } from '@devvit/web/client';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { parse } from '../shared/sim';
 
 type Info = {
   day: number;
+  rows: string[];
+  role: 'A' | 'B';
   humans: number;
   played: boolean;
   streak: number;
@@ -23,8 +26,41 @@ h1{margin:0;font-size:28px;letter-spacing:.5px}
 .sub{font-size:14px;opacity:.75;max-width:280px;line-height:1.4}
 .row{display:flex;gap:18px;font-size:13px}
 .row b{display:block;font-size:20px;color:#f2b84b}
+.mini{display:grid;gap:2px}
+.m{width:16px;height:16px;border-radius:3px;background:#232733;position:relative}
+.m.w{background:#0c0d11}
+.mk{position:absolute;inset:2px;border-radius:50%}
 .go{background:#f2b84b;color:#14161c;border:0;border-radius:999px;padding:12px 28px;font-size:16px;font-weight:700;cursor:pointer}
 `;
+
+function Mini({ rows, role }: { rows: string[]; role: 'A' | 'B' }) {
+  const l = parse(rows);
+  const me = role === 'A' ? l.a : l.b;
+  const pt = role === 'A' ? l.b : l.a;
+  const myGoal = role === 'A' ? l.ga : l.gb;
+  const ptGoal = role === 'A' ? l.gb : l.ga;
+  const door: Record<string, string> = { x: '#e8735a', y: '#8b7be8' };
+  const same = (p: { x: number; y: number }, x: number, y: number) => p.x === x && p.y === y;
+  return (
+    <div className="mini" style={{ gridTemplateColumns: `repeat(${l.cells[0]!.length}, 16px)` }}>
+      {l.cells.flatMap((row, y) =>
+        row.split('').map((ch, x) => {
+          const col = door[ch.toLowerCase()];
+          const plate = ch === ch.toLowerCase();
+          return (
+            <div key={`${x}-${y}`} className={ch === '#' ? 'm w' : 'm'}>
+              {col && <div className="mk" style={{ background: col, opacity: plate ? 0.5 : 1, borderRadius: plate ? '50%' : 2 }} />}
+              {same(myGoal, x, y) && <div className="mk" style={{ border: '2px dashed #f2b84b', borderRadius: 4 }} />}
+              {same(ptGoal, x, y) && <div className="mk" style={{ border: '2px dashed #4fc3b5', borderRadius: 4 }} />}
+              {same(pt, x, y) && <div className="mk" style={{ background: '#4fc3b5', opacity: 0.8 }} />}
+              {same(me, x, y) && <div className="mk" style={{ background: '#f2b84b' }} />}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
 
 function Splash() {
   const [info, setInfo] = useState<Info | null>(null);
@@ -39,11 +75,15 @@ function Splash() {
 
   return (
     <div className="s">
-      <div className="pair">
-        <div className="d" style={{ background: '#f2b84b' }} />
-        <div className="l" />
-        <div className="d" style={{ background: '#4fc3b5', opacity: 0.75 }} />
-      </div>
+      {info ? (
+        <Mini rows={info.rows} role={info.role} />
+      ) : (
+        <div className="pair">
+          <div className="d" style={{ background: '#f2b84b' }} />
+          <div className="l" />
+          <div className="d" style={{ background: '#4fc3b5', opacity: 0.75 }} />
+        </div>
+      )}
       <h1>Yestermate</h1>
       <div className="sub">
         {info

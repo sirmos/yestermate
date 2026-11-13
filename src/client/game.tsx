@@ -13,7 +13,7 @@ type St = {
   uses: number;
   top: { member: string; score: number }[];
 };
-type Result = { humans: number; streak: number; practice?: boolean; link?: number };
+type Result = { humans: number; streak: number; practice?: boolean; link?: number; failed?: boolean };
 
 const KEYS: Record<string, number> = {
   ArrowUp: 1, w: 1, ArrowDown: 2, s: 2, ArrowLeft: 3, a: 3, ArrowRight: 4, d: 4, ' ': 0,
@@ -59,6 +59,7 @@ function Game({ st }: { st: St }) {
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
   const [tab, setTab] = useState<'play' | 'board'>('play');
+  const [tries, setTries] = useState(0);
 
   const sim = useMemo(() => {
     let s = start(level);
@@ -104,11 +105,11 @@ function Game({ st }: { st: St }) {
       body: JSON.stringify({ moves, ghostId: st.ghost.id }),
     })
       .then((r) => r.json())
-      .then((j) => setRes(j))
-      .catch(() => setRes({ humans: st.humans, streak: st.streak, practice: true }));
+      .then((j) => setRes(j.ok ? j : { humans: 0, streak: 0, failed: true }))
+      .catch(() => setRes({ humans: 0, streak: 0, failed: true }));
     // Only send once, when the level is finished.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finished]);
+  }, [finished, tries]);
 
   const cellAt = (p: { x: number; y: number }) => level.cells[p.y]![p.x]!;
   const doorOpacity = (door: string) => {
@@ -117,6 +118,17 @@ function Game({ st }: { st: St }) {
     if (cellAt(me) === plate) return 0.5;
     return 1;
   };
+  const onPlate = (c: string) => c === 'x' || c === 'y';
+  const hintText =
+    moves.length === 0
+      ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user}, and their moves are fixed.`
+      : onPlate(cellAt(me))
+        ? 'You are holding a door open for your partner.'
+        : onPlate(cellAt(pt))
+          ? 'Your partner is holding a door open for you. Go through it.'
+          : moves.length >= 12
+            ? 'Stuck? Try waiting a step so your partner gets into place. Restart is free.'
+            : 'A door opens only while your partner stands on its plate.';
 
   if (tab === 'board') {
     return (
@@ -172,11 +184,7 @@ function Game({ st }: { st: St }) {
 
       {!finished && (
         <>
-          <div className="hint">
-            {moves.length === 0
-              ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user}, and their moves are fixed. Time yours to fit.`
-              : 'A door opens only while your partner stands on its plate. Hold theirs the same way.'}
-          </div>
+          <div className="hint">{hintText}</div>
           <div className="pad">
             <span />
             <button onClick={() => press(1)}>↑</button>
@@ -195,6 +203,19 @@ function Game({ st }: { st: St }) {
         <div className="card">
           {!res ? (
             <div>Adding your run to the chain...</div>
+          ) : res.failed ? (
+            <>
+              <div className="big">Run not saved</div>
+              <div className="hint">Your solve worked, but we could not reach the server.</div>
+              <button
+                onClick={() => {
+                  setRes(null);
+                  setTries((t) => t + 1);
+                }}
+              >
+                Try saving again
+              </button>
+            </>
           ) : (
             <>
               <div className="big">Link #{res.link ?? res.humans}</div>
@@ -217,13 +238,32 @@ function Game({ st }: { st: St }) {
 
 function App() {
   const [st, setSt] = useState<St | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     fetch('/api/state')
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error('bad response');
+        return r.json();
+      })
       .then(setSt)
-      .catch(() => undefined);
-  }, []);
-  if (!st) return <div className="w">Loading...</div>;
+      .catch(() => setFailed(true));
+  }, [attempt]);
+  const retry = () => {
+    setFailed(false);
+    setAttempt((n) => n + 1);
+  };
+  if (failed)
+    return (
+      <div className="w">
+        <div className="card">
+          <div className="big">Could not load today's level</div>
+          <div className="hint">Check your connection and try again.</div>
+          <button onClick={retry}>Try again</button>
+        </div>
+      </div>
+    );
+  if (!st) return <div className="w hint">Loading today's level...</div>;
   return <Game st={st} />;
 }
 
