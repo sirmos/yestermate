@@ -13,7 +13,7 @@ type St = {
   uses: number;
   top: { member: string; score: number }[];
 };
-type Result = { humans: number; streak: number; practice?: boolean };
+type Result = { humans: number; streak: number; practice?: boolean; link?: number };
 
 const KEYS: Record<string, number> = {
   ArrowUp: 1, w: 1, ArrowDown: 2, s: 2, ArrowLeft: 3, a: 3, ArrowRight: 4, d: 4, ' ': 0,
@@ -40,12 +40,25 @@ button:active{background:#3a4156}
 .card{background:#232733;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px}
 .big{font-size:26px;font-weight:700}
 .hint{font-size:13px;opacity:.7;line-height:1.4}
+.tab{background:none;padding:4px 12px;font-size:13px;border-radius:999px}
+.tab.on{background:#2b3040}
+.rowb{display:flex;justify-content:space-between;font-size:15px}
 `;
+
+function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => void }) {
+  return (
+    <span>
+      <button className={tab === 'play' ? 'tab on' : 'tab'} onClick={() => setTab('play')}>Play</button>
+      <button className={tab === 'board' ? 'tab on' : 'tab'} onClick={() => setTab('board')}>Best partners</button>
+    </span>
+  );
+}
 
 function Game({ st }: { st: St }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
+  const [tab, setTab] = useState<'play' | 'board'>('play');
 
   const sim = useMemo(() => {
     let s = start(level);
@@ -105,11 +118,34 @@ function Game({ st }: { st: St }) {
     return 1;
   };
 
+  if (tab === 'board') {
+    return (
+      <div className="w">
+        <div className="top">
+          <Tabs tab={tab} setTab={setTab} />
+          <span />
+        </div>
+        <div className="card">
+          <div className="big">Best partners</div>
+          <div className="hint">Ranked by how many strangers played with their runs.</div>
+          {st.top.length === 0 && <div className="hint">Nobody yet. Play today and be the first.</div>}
+          {st.top.map((t, i) => (
+            <div key={t.member} className="rowb">
+              <span>{i + 1}. u/{t.member}</span>
+              <span>{t.score}</span>
+            </div>
+          ))}
+          <div className="hint">Strangers who played with your runs: {st.uses}</div>
+        </div>
+      </div>
+    );
+  }
+
   const w = level.cells[0]!.length;
   return (
     <div className="w">
       <div className="top">
-        <span>You are the amber dot</span>
+        <Tabs tab={tab} setTab={setTab} />
         <span>Step {moves.length} / {MAX_TICKS}</span>
       </div>
 
@@ -161,7 +197,7 @@ function Game({ st }: { st: St }) {
             <div>Adding your run to the chain...</div>
           ) : (
             <>
-              <div className="big">Link #{res.humans}</div>
+              <div className="big">Link #{res.link ?? res.humans}</div>
               <div>
                 {res.practice
                   ? 'Practice run. Your run for today is already in the chain.'

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { reddit, redis } from '@devvit/web/server';
+import { context, reddit, redis } from '@devvit/web/server';
 import { parse, solve, validate, type Role } from '../../shared/sim';
 import { LEVELS } from '../../shared/levels';
 
@@ -87,5 +87,12 @@ api.post('/submit', async (c) => {
     await redis.incrBy(`uses:${ghost.user}`, 1);
     await redis.zIncrBy('board:uses', ghost.user, 1);
   }
-  return c.json({ ok: true, humans: chain.humans + 1, streak: count, ticks: result.ticks });
+  const n = await redis.incrBy('links:total', 1);
+  const flair = `Link #${n}`;
+  try {
+    await reddit.setUserFlair({ subredditName: context.subredditName, username: user, text: flair });
+  } catch {
+    // Flair needs permission in the subreddit. The game works without it.
+  }
+  return c.json({ ok: true, humans: chain.humans + 1, streak: count, ticks: result.ticks, link: n });
 });
