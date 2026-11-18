@@ -1,7 +1,8 @@
 import './index.css';
 import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MAX_TICKS, parse, start, step, type Role } from '../shared/sim';
+import { MAX_TICKS, minSteps, parse, solve, start, step, type Role } from '../shared/sim';
+import { LEVELS } from '../shared/levels';
 
 type St = {
   rows: string[];
@@ -12,6 +13,8 @@ type St = {
   streak: number;
   uses: number;
   top: { member: string; score: number }[];
+  tutorialDone: boolean;
+  recent: string[];
 };
 type Result = { humans: number; streak: number; practice?: boolean; link?: number; failed?: boolean };
 
@@ -81,7 +84,9 @@ function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => v
   );
 }
 
-function Game({ st }: { st: St }) {
+type Lesson = { n: number; total: number; tip: string; onNext: () => void };
+
+function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
@@ -100,6 +105,8 @@ function Game({ st }: { st: St }) {
   }, [level, moves, st]);
 
   const finished = sim.da && sim.db;
+  const par = useMemo(() => minSteps(level, st.role, st.ghost.moves), [level, st]);
+  const nStars = par ? (moves.length <= par ? 3 : moves.length <= par + 2 ? 2 : 1) : 1;
   useEffect(() => {
     if (finished && sound) [523, 659, 784].forEach((f, i) => setTimeout(() => beep(f, 160), i * 140));
     // Plays once when the level is finished.
@@ -132,7 +139,7 @@ function Game({ st }: { st: St }) {
   }, [press]);
 
   useEffect(() => {
-    if (!finished || res) return;
+    if (!finished || res || tutorial) return;
     fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -153,7 +160,7 @@ function Game({ st }: { st: St }) {
     return 1;
   };
   const onPlate = (c: string) => c === 'x' || c === 'y';
-  const hintText =
+  const baseHint =
     moves.length === 0
       ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user}, and their moves are fixed.`
       : onPlate(cellAt(me))
@@ -163,6 +170,7 @@ function Game({ st }: { st: St }) {
           : moves.length >= 12
             ? 'Stuck? Try waiting a step so your partner gets into place. Restart is free.'
             : 'A door opens only while your partner stands on its plate.';
+  const hintText = tutorial && moves.length === 0 ? tutorial.tip : baseHint;
 
   if (tab === 'board') {
     return (
@@ -200,7 +208,9 @@ function Game({ st }: { st: St }) {
     <div className="w">
       <div className="top">
         <span className="logo">Yester<b>mate</b></span>
-        <span className="steps">Step {moves.length} / {MAX_TICKS}</span>
+        <span className="steps">
+          {tutorial ? `Lesson ${tutorial.n} of ${tutorial.total}` : `Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
+        </span>
       </div>
       <div className="top">
         <Tabs tab={tab} setTab={setTab} />
@@ -258,7 +268,13 @@ function Game({ st }: { st: St }) {
 
       {finished && (
         <div className="card">
-          {!res ? (
+          {tutorial ? (
+            <>
+              <div className="big">Nice!</div>
+              <div className="hint">Lesson {tutorial.n} of {tutorial.total} done in {moves.length} steps.</div>
+              <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? "Start today's level" : 'Next lesson'}</button>
+            </>
+          ) : !res ? (
             <div>Adding your run to the chain...</div>
           ) : res.failed ? (
             <>
@@ -276,6 +292,8 @@ function Game({ st }: { st: St }) {
           ) : (
             <>
               <div className="big">Link #{res.link ?? res.humans}</div>
+              <div style={{ fontSize: 26, color: '#f2b84b' }}>{'★'.repeat(nStars)}{'☆'.repeat(3 - nStars)}</div>
+              <div className="hint">{moves.length} steps. Par is {par}.</div>
               <div>
                 {res.practice
                   ? 'Practice run. Your run for today is already in the chain.'
@@ -283,6 +301,7 @@ function Game({ st }: { st: St }) {
               </div>
               <div>Streak: {res.streak} day{res.streak === 1 ? '' : 's'}</div>
               <div>Strangers who played with your runs: {st.uses}</div>
+              {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
               <div className="hint">Come back tomorrow to see who used your run.</div>
               <button onClick={() => setMoves('')}>Play again for practice</button>
             </>
@@ -291,6 +310,24 @@ function Game({ st }: { st: St }) {
       )}
     </div>
   );
+}
+
+const TUTORIAL = [
+  { rows: LEVELS[0]!, role: 'A' as Role, tip: 'Your partner will stand on the ring to open the door for you. Wait for it, then walk through.' },
+  { rows: LEVELS[0]!, role: 'B' as Role, tip: 'Now you are the helper. Step on the ring so your partner can get through, then go to your own square.' },
+  { rows: LEVELS[1]!, role: 'A' as Role, tip: 'Watch where your partner goes. A door opens for you only while they hold its ring.' },
+];
+
+function Tutorial({ onDone }: { onDone: () => void }) {
+  const [i, setI] = useState(0);
+  const t = TUTORIAL[i]!;
+  const st = useMemo<St>(() => {
+    const sol = solve(parse(t.rows))!;
+    const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
+    return { rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [] };
+  }, [t]);
+  const next = () => (i + 1 < TUTORIAL.length ? setI(i + 1) : onDone());
+  return <Game key={i} st={st} tutorial={{ n: i + 1, total: TUTORIAL.length, tip: t.tip, onNext: next }} />;
 }
 
 function App() {
@@ -321,6 +358,13 @@ function App() {
       </div>
     );
   if (!st) return <div className="w hint">Loading today's level...</div>;
+  if (!st.tutorialDone) {
+    const done = () => {
+      fetch('/api/tutorial-done', { method: 'POST' }).catch(() => undefined);
+      setSt({ ...st, tutorialDone: true });
+    };
+    return <Tutorial onDone={done} />;
+  }
   return <Game st={st} />;
 }
 

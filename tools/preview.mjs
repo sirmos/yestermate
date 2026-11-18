@@ -16,6 +16,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 
 let day = 0;
 let streak = 3;
+let tutorialDone = false;
 let linkCount = 411;
 let chains = new Map();
 let links = new Map();
@@ -58,6 +59,8 @@ createServer((req, res) => {
       streak,
       uses: 4,
       top,
+      tutorialDone,
+      recent: ['mara_k', 'tolu_b'],
     });
   }
 
@@ -85,6 +88,10 @@ createServer((req, res) => {
     return;
   }
 
+  if (path === '/api/tutorial-done') {
+    tutorialDone = true;
+    return send(res, 200, { ok: true });
+  }
   if (path === '/set-day') {
     day = Number(url.searchParams.get('day') ?? 0);
     return send(res, 200, `Day set to ${day}. Reload the page.`, 'text/plain');
@@ -93,6 +100,7 @@ createServer((req, res) => {
     chains = new Map();
     links = new Map();
     streak = 3;
+    tutorialDone = false;
     return send(res, 200, 'Sample chain cleared. Reload the page.', 'text/plain');
   }
 

@@ -78,6 +78,25 @@ export function validate(l: Level, role: Role, moves: string, ghost: string) {
   return role === 'A' ? simulate(l, moves, ghost) : simulate(l, ghost, moves);
 }
 
+// Fewest ticks for the player to finish while the ghost keeps to its recording.
+export function minSteps(l: Level, role: Role, ghost: string): number | null {
+  let layer: S[] = [start(l)];
+  for (let t = 0; t < MAX_TICKS; t++) {
+    const g = Number(ghost[t] ?? '0');
+    const seen = new Map<string, S>();
+    for (const s of layer) {
+      for (let m = 0; m < 5; m++) {
+        const n = role === 'A' ? step(l, s, m, g) : step(l, s, g, m);
+        if (n.da && n.db) return t + 1;
+        const k = `${n.a.x},${n.a.y},${n.b.x},${n.b.y},${+n.da}${+n.db}`;
+        if (!seen.has(k)) seen.set(k, n);
+      }
+    }
+    layer = [...seen.values()];
+  }
+  return null;
+}
+
 // Breadth first search over joint states. Used to build the bot seed chain.
 export function solve(l: Level): { a: string; b: string } | null {
   const key = (s: S) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y},${+s.da}${+s.db}`;

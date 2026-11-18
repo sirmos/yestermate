@@ -13,7 +13,7 @@ Built with Devvit Web for Reddit's Game of the Day hackathon.
 5. A door opens only while your partner stands on its matching plate. You can never open your own door, so you must hold the doors for them in the same way.
 6. Reach your goal while your partner reaches theirs.
 
-There is no timer. Take your time.
+New players start with three short lessons. There is no timer. Each level has a par, and finishing in fewer steps earns up to three stars.
 
 ## The daily loop
 

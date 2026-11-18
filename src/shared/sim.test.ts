@@ -3,7 +3,7 @@
 // @ts-nocheck
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_TICKS, parse, solve, start, step, validate, type Level } from './sim.ts';
+import { MAX_TICKS, minSteps, parse, solve, start, step, validate, type Level } from './sim.ts';
 import { LEVELS } from './levels.ts';
 
 // Can one player finish while the partner just waits?
@@ -52,4 +52,13 @@ test('bad runs are rejected', () => {
   assert.equal(validate(l, 'A', 'abc', s.b).won, false);
   assert.equal(validate(l, 'A', '4'.repeat(MAX_TICKS + 1), s.b).won, false);
   assert.equal(validate(l, 'A', '444444444', '').won, false);
+});
+
+test('par matches the solver when the partner follows the solution', () => {
+  LEVELS.forEach((rows, i) => {
+    const l = parse(rows);
+    const s = solve(l);
+    assert.equal(minSteps(l, 'A', s.b), s.a.length, `level ${i}: par for A`);
+    assert.equal(minSteps(l, 'B', s.a), s.a.length, `level ${i}: par for B`);
+  });
 });

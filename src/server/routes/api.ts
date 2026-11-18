@@ -42,6 +42,8 @@ api.get('/state', async (c) => {
   const streak = await getJson<{ last: number; count: number }>(`streak:${user}`);
   const uses = Number((await redis.get(`uses:${user}`)) ?? 0);
   const top = await redis.zRange('board:uses', 0, 9, { by: 'rank', reverse: true });
+  const tutorialDone = !!(await redis.get(`tutorial:${user}`));
+  const recent = (await getJson<string[]>(`recent:${user}`)) ?? [];
   return c.json({
     day,
     rows: LEVELS[day % LEVELS.length]!,
@@ -52,7 +54,15 @@ api.get('/state', async (c) => {
     streak: streak && streak.last >= day - 1 ? streak.count : 0,
     uses,
     top,
+    tutorialDone,
+    recent,
   });
+});
+
+api.post('/tutorial-done', async (c) => {
+  const user = await who();
+  await redis.set(`tutorial:${user}`, '1');
+  return c.json({ ok: true });
 });
 
 api.post('/submit', async (c) => {
@@ -86,6 +96,9 @@ api.post('/submit', async (c) => {
   if (ghost.user !== 'bot') {
     await redis.incrBy(`uses:${ghost.user}`, 1);
     await redis.zIncrBy('board:uses', ghost.user, 1);
+    const seen = (await getJson<string[]>(`recent:${ghost.user}`)) ?? [];
+    const next = [user, ...seen.filter((u) => u !== user)].slice(0, 8);
+    await redis.set(`recent:${ghost.user}`, JSON.stringify(next));
   }
   const n = await redis.incrBy('links:total', 1);
   const flair = `Link #${n}`;
