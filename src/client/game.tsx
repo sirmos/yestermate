@@ -23,27 +23,54 @@ const ME = '#f2b84b';
 const PARTNER = '#4fc3b5';
 
 const css = `
-body{margin:0;background:#14161c;color:#ece8df;font-family:system-ui,sans-serif}
-.w{max-width:440px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:100vh;box-sizing:border-box}
-.top{display:flex;justify-content:space-between;font-size:13px;opacity:.8}
-.grid{display:grid;gap:3px}
-.c{aspect-ratio:1;border-radius:6px;position:relative;background:#232733}
-.c.wall{background:#0c0d11}
-.dot{position:absolute;inset:22%;border-radius:50%}
-.bar{position:absolute;inset:8% 30%;border-radius:3px}
-.goal{position:absolute;inset:14%;border-radius:8px;border:2px dashed}
-.me,.pt{position:absolute;inset:16%;border-radius:50%;transition:all .12s}
-.pt{opacity:.75;box-shadow:inset 0 0 0 3px #14161c}
-.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-button{background:#2b3040;color:#ece8df;border:0;border-radius:10px;padding:14px 0;font-size:18px}
-button:active{background:#3a4156}
-.card{background:#232733;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px}
-.big{font-size:26px;font-weight:700}
-.hint{font-size:13px;opacity:.7;line-height:1.4}
-.tab{background:none;padding:4px 12px;font-size:13px;border-radius:999px}
-.tab.on{background:#2b3040}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(120% 70% at 50% 0%,#222838 0%,#14161c 62%);color:#ece8df;font-family:'Trebuchet MS',system-ui,sans-serif}
+.w{max-width:420px;margin:0 auto;padding:14px;display:flex;flex-direction:column;gap:12px;min-height:100vh}
+.top{display:flex;align-items:center;justify-content:space-between}
+.logo{font-weight:800;font-size:21px;letter-spacing:.4px}
+.logo b{color:#f2b84b}
+.steps{font-size:12px;opacity:.65}
+.board{position:relative;width:100%}
+.grid{position:absolute;inset:0;display:grid}
+.c{position:relative;border-radius:10px;background:#272c3b;box-shadow:inset 0 0 0 2px #171a22}
+.c.wall{background:#0d0f14}
+.plate{position:absolute;inset:27%;border-radius:50%;border:3px solid;transition:background .12s}
+.door{position:absolute;inset:6% 24%;border-radius:6px;transition:opacity .15s}
+.goal{position:absolute;inset:13%;border-radius:11px;border:2px dashed;animation:pulse 2.2s ease-in-out infinite}
+.actor{position:absolute;display:flex;align-items:center;justify-content:center;transition:left .16s ease,top .16s ease;pointer-events:none}
+.body{width:70%;height:70%;border-radius:36%;display:flex;gap:13%;align-items:center;justify-content:center;box-shadow:0 5px 12px rgba(0,0,0,.45)}
+.body i{width:14%;height:24%;background:#14161c;border-radius:50%}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:300px;width:100%;margin:0 auto}
+button{background:#2d3345;color:#ece8df;border:0;border-radius:12px;padding:12px 0;font:inherit;font-size:17px;box-shadow:0 3px 0 #191c26;cursor:pointer}
+button:active{transform:translateY(2px);box-shadow:none}
+.card{background:#232837;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:8px;animation:rise .3s ease}
+.big{font-size:26px;font-weight:800;color:#f2b84b}
+.hint{font-size:13px;opacity:.8;line-height:1.45}
+.tab{background:none;box-shadow:none;padding:5px 12px;font-size:13px;border-radius:999px}
+.tab.on{background:#2d3345}
 .rowb{display:flex;justify-content:space-between;font-size:15px}
+@keyframes pulse{50%{opacity:.45}}
+@keyframes hop{50%{transform:translateY(-22%)}}
+.board.won .body{animation:hop .45s ease 3}
+@keyframes rise{from{transform:translateY(14px);opacity:0}}
 `;
+
+let audio: AudioContext | null = null;
+function beep(freq: number, ms = 90) {
+  try {
+    if (!audio) audio = new AudioContext();
+    const o = audio.createOscillator();
+    const g = audio.createGain();
+    o.frequency.value = freq;
+    g.gain.value = 0.04;
+    o.connect(g);
+    g.connect(audio.destination);
+    o.start();
+    o.stop(audio.currentTime + ms / 1000);
+  } catch {
+    // Sound is optional.
+  }
+}
 
 function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => void }) {
   return (
@@ -60,6 +87,7 @@ function Game({ st }: { st: St }) {
   const [res, setRes] = useState<Result | null>(null);
   const [tab, setTab] = useState<'play' | 'board'>('play');
   const [tries, setTries] = useState(0);
+  const [sound, setSound] = useState(false);
 
   const sim = useMemo(() => {
     let s = start(level);
@@ -72,6 +100,11 @@ function Game({ st }: { st: St }) {
   }, [level, moves, st]);
 
   const finished = sim.da && sim.db;
+  useEffect(() => {
+    if (finished && sound) [523, 659, 784].forEach((f, i) => setTimeout(() => beep(f, 160), i * 140));
+    // Plays once when the level is finished.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
   const me = st.role === 'A' ? sim.a : sim.b;
   const pt = st.role === 'A' ? sim.b : sim.a;
   const myGoal = st.role === 'A' ? level.ga : level.gb;
@@ -80,9 +113,10 @@ function Game({ st }: { st: St }) {
   const press = useCallback(
     (m: number) => {
       if (finished || moves.length >= MAX_TICKS) return;
+      if (sound) beep(m === 0 ? 300 : 420, 70);
       setMoves((v) => v + m);
     },
-    [finished, moves.length]
+    [finished, moves.length, sound]
   );
 
   useEffect(() => {
@@ -153,33 +187,56 @@ function Game({ st }: { st: St }) {
     );
   }
 
-  const w = level.cells[0]!.length;
+  const cols = level.cells[0]!.length - 2;
+  const rows = level.cells.length - 2;
+  const same = (p: { x: number; y: number }, x: number, y: number) => p.x === x && p.y === y;
+  const pos = (p: { x: number; y: number }) => ({
+    width: `${100 / cols}%`,
+    height: `${100 / rows}%`,
+    left: `${((p.x - 1) / cols) * 100}%`,
+    top: `${((p.y - 1) / rows) * 100}%`,
+  });
   return (
     <div className="w">
       <div className="top">
+        <span className="logo">Yester<b>mate</b></span>
+        <span className="steps">Step {moves.length} / {MAX_TICKS}</span>
+      </div>
+      <div className="top">
         <Tabs tab={tab} setTab={setTab} />
-        <span>Step {moves.length} / {MAX_TICKS}</span>
+        <button className="tab" onClick={() => setSound((v) => !v)}>
+          {sound ? 'Sound on' : 'Sound off'}
+        </button>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${w}, 1fr)` }}>
-        {level.cells.flatMap((row, y) =>
-          row.split('').map((ch, x) => {
-            const door = ch === 'X' || ch === 'Y';
-            const col = COLOR[ch.toLowerCase()];
-            return (
-              <div key={`${x}-${y}`} className={ch === '#' ? 'c wall' : 'c'}>
-                {(ch === 'x' || ch === 'y') && <div className="dot" style={{ background: col, opacity: 0.5 }} />}
-                {door && (
-                  <div className="bar" style={{ background: col, opacity: doorOpacity(ch) }} />
-                )}
-                {x === myGoal.x && y === myGoal.y && <div className="goal" style={{ borderColor: ME }} />}
-                {x === ptGoal.x && y === ptGoal.y && <div className="goal" style={{ borderColor: PARTNER }} />}
-                {x === pt.x && y === pt.y && <div className="pt" style={{ background: PARTNER }} />}
-                {x === me.x && y === me.y && <div className="me" style={{ background: ME }} />}
-              </div>
-            );
-          })
-        )}
+      <div className={finished ? 'board won' : 'board'} style={{ aspectRatio: `${cols} / ${rows}` }}>
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
+          {level.cells.slice(1, -1).flatMap((row, y) =>
+            row
+              .slice(1, -1)
+              .split('')
+              .map((ch, x) => {
+                const k = COLOR[ch.toLowerCase()];
+                const isPlate = ch === 'x' || ch === 'y';
+                const isDoor = ch === 'X' || ch === 'Y';
+                const pressed = isPlate && (same(me, x + 1, y + 1) || same(pt, x + 1, y + 1));
+                return (
+                  <div key={`${x}-${y}`} className={ch === '#' ? 'c wall' : 'c'}>
+                    {isPlate && <div className="plate" style={{ borderColor: k, background: pressed ? k : 'transparent' }} />}
+                    {isDoor && <div className="door" style={{ background: k, opacity: doorOpacity(ch) }} />}
+                    {same(myGoal, x + 1, y + 1) && <div className="goal" style={{ borderColor: ME }} />}
+                    {same(ptGoal, x + 1, y + 1) && <div className="goal" style={{ borderColor: PARTNER }} />}
+                  </div>
+                );
+              })
+          )}
+        </div>
+        <div className="actor" style={pos(pt)}>
+          <div className="body" style={{ background: PARTNER, opacity: 0.8 }}><i /><i /></div>
+        </div>
+        <div className="actor" style={pos(me)}>
+          <div className="body" style={{ background: ME }}><i /><i /></div>
+        </div>
       </div>
 
       {!finished && (
