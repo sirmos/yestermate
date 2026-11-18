@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { context, reddit, redis } from '@devvit/web/server';
-import { parse, solve, validate, type Role } from '../../shared/sim';
+import { parse, replay, solve, validate, type Role } from '../../shared/sim';
 import { LEVELS } from '../../shared/levels';
 
 const levelForDay = (d: number) => parse(LEVELS[d % LEVELS.length]!);
@@ -85,7 +85,8 @@ api.post('/submit', async (c) => {
     return c.json({ ok: true, humans: chain.humans, streak: streakNow?.count ?? 1, practice: true });
   }
 
-  const link: Link = { id: `${day}-${chain.humans + 1}`, role, moves, user };
+  const clean = replay(levelForDay(day), role, moves, ghost.moves).eff.replace(/0+$/, '');
+  const link: Link = { id: `${day}-${chain.humans + 1}`, role, moves: clean, user };
   await redis.set(`link:${link.id}`, JSON.stringify(link));
   await redis.set(`chain:${day}`, JSON.stringify({ head: link, humans: chain.humans + 1 }));
   await redis.set(`played:${day}:${user}`, JSON.stringify({ link: link.id }));

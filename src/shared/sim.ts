@@ -5,7 +5,7 @@
 export type Role = 'A' | 'B';
 export type P = { x: number; y: number };
 export type Level = { cells: string[]; a: P; b: P; ga: P; gb: P };
-type S = { a: P; b: P; da: boolean; db: boolean };
+export type S = { a: P; b: P; da: boolean; db: boolean };
 
 export const MAX_TICKS = 90;
 const DX = [0, 0, 0, -1, 1];
@@ -33,7 +33,7 @@ const at = (l: Level, p: P) => l.cells[p.y]?.[p.x] ?? '#';
 function passable(l: Level, s: S, x: number, y: number, mover: 'a' | 'b'): boolean {
   const c = at(l, { x, y });
   if (c === '#') return false;
-  if (c === 'X' || c === 'Y') {
+  if (c === 'X' || c === 'Y' || c === 'Z') {
     const plate = c.toLowerCase();
     return at(l, mover === 'a' ? s.b : s.a) === plate;
   }
@@ -72,24 +72,60 @@ export function simulate(l: Level, am: string, bm: string) {
   return { won: false, ticks: MAX_TICKS };
 }
 
+// The ghost tries its next recorded move each tick. If a door blocks it, it keeps
+// that move and tries again, so a late player cannot waste its moves.
+// eff is the player's moves with blocked ones turned into waits.
+export function replay(l: Level, role: Role, moves: string, ghost: string) {
+  let s = start(l);
+  let ptr = 0;
+  let blocked = false;
+  let eff = '';
+  for (let t = 0; t < moves.length && t < MAX_TICKS; t++) {
+    const mine = Number(moves[t] ?? '0');
+    const g = Number(ghost[ptr] ?? '0');
+    const n = role === 'A' ? step(l, s, mine, g) : step(l, s, g, mine);
+    const gOld = role === 'A' ? s.b : s.a;
+    const gNew = role === 'A' ? n.b : n.a;
+    const mOld = role === 'A' ? s.a : s.b;
+    const mNew = role === 'A' ? n.a : n.b;
+    const gDone = role === 'A' ? s.db : s.da;
+    blocked = g !== 0 && !gDone && gOld.x === gNew.x && gOld.y === gNew.y;
+    if (!blocked) ptr++;
+    eff += mine !== 0 && (mOld.x !== mNew.x || mOld.y !== mNew.y) ? String(mine) : '0';
+    s = n;
+  }
+  return { s, ptr, blocked, eff };
+}
+
 // Server check. The player plays `role`, the ghost plays the other role.
 export function validate(l: Level, role: Role, moves: string, ghost: string) {
   if (!/^[0-4]*$/.test(moves) || moves.length > MAX_TICKS) return { won: false, ticks: 0 };
-  return role === 'A' ? simulate(l, moves, ghost) : simulate(l, ghost, moves);
+  const padded = moves.padEnd(MAX_TICKS, '0');
+  for (let t = 1; t <= MAX_TICKS; t++) {
+    const r = replay(l, role, padded.slice(0, t), ghost);
+    if (r.s.da && r.s.db) return { won: true, ticks: t };
+  }
+  return { won: false, ticks: MAX_TICKS };
 }
 
 // Fewest ticks for the player to finish while the ghost keeps to its recording.
 export function minSteps(l: Level, role: Role, ghost: string): number | null {
-  let layer: S[] = [start(l)];
+  type N = { s: S; p: number };
+  let layer: N[] = [{ s: start(l), p: 0 }];
   for (let t = 0; t < MAX_TICKS; t++) {
-    const g = Number(ghost[t] ?? '0');
-    const seen = new Map<string, S>();
-    for (const s of layer) {
+    const seen = new Map<string, N>();
+    for (const { s, p } of layer) {
+      const g = Number(ghost[p] ?? '0');
       for (let m = 0; m < 5; m++) {
         const n = role === 'A' ? step(l, s, m, g) : step(l, s, g, m);
         if (n.da && n.db) return t + 1;
-        const k = `${n.a.x},${n.a.y},${n.b.x},${n.b.y},${+n.da}${+n.db}`;
-        if (!seen.has(k)) seen.set(k, n);
+        const gOld = role === 'A' ? s.b : s.a;
+        const gNew = role === 'A' ? n.b : n.a;
+        const gDone = role === 'A' ? s.db : s.da;
+        const blocked = g !== 0 && !gDone && gOld.x === gNew.x && gOld.y === gNew.y;
+        const q = blocked ? p : p + 1;
+        const k = `${n.a.x},${n.a.y},${n.b.x},${n.b.y},${+n.da}${+n.db},${q}`;
+        if (!seen.has(k)) seen.set(k, { s: n, p: q });
       }
     }
     layer = [...seen.values()];

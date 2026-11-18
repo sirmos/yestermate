@@ -13,13 +13,13 @@ const rnd = () => {
 const pick = (a) => a[Math.floor(rnd() * a.length)];
 
 function build() {
-  const w = 9;
+  const w = rnd() < 0.5 ? 11 : 9;
   const h = pick([5, 6]);
   const g = Array.from({ length: h }, (_, y) =>
     Array.from({ length: w }, (_, x) => (x === 0 || y === 0 || x === w - 1 || y === h - 1 ? '#' : '.'))
   );
-  const walls = rnd() < 0.6 ? [3, 6] : [4];
-  const letters = ['X', 'Y'];
+  const walls = w === 11 ? [3, 5, 7] : rnd() < 0.6 ? [3, 6] : [4];
+  const letters = ['X', 'Y', 'Z'];
   walls.forEach((cx, i) => {
     const door = 1 + Math.floor(rnd() * (h - 2));
     for (let y = 1; y < h - 1; y++) g[y][cx] = y === door ? letters[i] : '#';
@@ -40,7 +40,7 @@ function build() {
     put('B', (x) => x < walls[0]) &&
     put('g', (x) => x > last) &&
     put('h', (x) => x > last) &&
-    walls.every((_, i) => put(letters[i].toLowerCase(), () => true));
+    walls.every((cx, i) => put(letters[i].toLowerCase(), (x) => x < cx));
   return ok ? g.map((r) => r.join('')) : null;
 }
 
@@ -77,16 +77,19 @@ for (let i = 0; i < 300000; i++) {
   const sol = solve(l);
   if (!sol) continue;
   const ticks = sol.a.length;
-  if (ticks < 8 || ticks > 34) continue;
+  if (ticks < 9 || ticks > 40) continue;
   if (solo(l, 'A') || solo(l, 'B')) continue;
   found.set(id, { rows, ticks });
 }
 
 const all = [...found.values()].sort((a, b) => a.ticks - b.ticks);
 const want = 35;
-const chosen = [];
-const pool = all.slice(Math.floor(all.length * 0.55));
-for (let i = 0; i < want && pool.length; i++) chosen.push(pool[Math.floor((i * pool.length) / want)]);
+const spread = (list, n) => Array.from({ length: Math.min(n, list.length) }, (_, i) => list[Math.floor((i * list.length) / Math.min(n, list.length))]);
+const wideAll = all.filter((c) => c.rows[0].length === 11);
+const stdAll = all.filter((c) => c.rows[0].length === 9);
+const wide = spread(wideAll, 14);
+const std = spread(stdAll.slice(Math.floor(stdAll.length * 0.3)), want - wide.length);
+const chosen = [...std, ...wide].sort((a, b) => a.ticks - b.ticks);
 
 const tutorial = ['#########', '#A..X..g#', '#Bxh#...#', '#########'];
 const levels = [tutorial, ...chosen.map((c) => c.rows)];
@@ -101,4 +104,5 @@ writeFileSync(
   new URL('../src/shared/levels.ts', import.meta.url),
   `// Made by tools/gen-levels.mjs. Level 0 is the tutorial. Do not edit by hand.\n// A, B = spawns. g = goal for A. h = goal for B. x, y = plates. X, Y = doors.\nexport const LEVELS: string[][] = [\n${body}\n];\n`
 );
+console.log('wide', levels.filter((r) => r[0].length === 11).length, 'doors3', levels.filter((r) => r.join('').includes('Z')).length);
 console.log('candidates', all.length, 'written', levels.length, 'ticks', levels.slice(1).map((r) => solve(parse(r)).a.length).join(','));

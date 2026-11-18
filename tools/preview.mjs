@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse, solve, validate } from '../src/shared/sim.ts';
+import { parse, replay, solve, validate } from '../src/shared/sim.ts';
 import { LEVELS } from '../src/shared/levels.ts';
 
 const PORT = 5173;
@@ -76,7 +76,8 @@ createServer((req, res) => {
       const moves = String(body.moves ?? '').replace(/0+$/, '');
       if (!validate(parse(rowsFor()), role, moves, ghost.moves).won) return send(res, 400, { ok: false });
       if (c.played) return send(res, 200, { ok: true, humans: c.humans, streak, practice: true });
-      const link = { id: `${day}-${c.humans + 1}`, role, moves, user: 'you' };
+      const clean = replay(parse(rowsFor()), role, moves, ghost.moves).eff.replace(/0+$/, '');
+      const link = { id: `${day}-${c.humans + 1}`, role, moves: clean, user: 'you' };
       links.set(link.id, link);
       c.head = link;
       c.humans += 1;

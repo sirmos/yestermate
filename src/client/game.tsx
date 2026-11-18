@@ -1,7 +1,7 @@
 import './index.css';
 import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MAX_TICKS, minSteps, parse, solve, start, step, type Role } from '../shared/sim';
+import { MAX_TICKS, minSteps, parse, replay, solve, type Role } from '../shared/sim';
 import { LEVELS } from '../shared/levels';
 
 type St = {
@@ -21,7 +21,7 @@ type Result = { humans: number; streak: number; practice?: boolean; link?: numbe
 const KEYS: Record<string, number> = {
   ArrowUp: 1, w: 1, ArrowDown: 2, s: 2, ArrowLeft: 3, a: 3, ArrowRight: 4, d: 4, ' ': 0,
 };
-const COLOR: Record<string, string> = { x: '#e8735a', y: '#8b7be8' };
+const COLOR: Record<string, string> = { x: '#e8735a', y: '#8b7be8', z: '#4fa3e8' };
 const ME = '#f2b84b';
 const PARTNER = '#4fc3b5';
 
@@ -94,15 +94,8 @@ function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
   const [tries, setTries] = useState(0);
   const [sound, setSound] = useState(false);
 
-  const sim = useMemo(() => {
-    let s = start(level);
-    for (let t = 0; t < moves.length; t++) {
-      const p = Number(moves[t]);
-      const g = Number(st.ghost.moves[t] ?? '0');
-      s = st.role === 'A' ? step(level, s, p, g) : step(level, s, g, p);
-    }
-    return s;
-  }, [level, moves, st]);
+  const rep = useMemo(() => replay(level, st.role, moves, st.ghost.moves), [level, moves, st]);
+  const sim = rep.s;
 
   const finished = sim.da && sim.db;
   const par = useMemo(() => minSteps(level, st.role, st.ghost.moves), [level, st]);
@@ -159,11 +152,13 @@ function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
     if (cellAt(me) === plate) return 0.5;
     return 1;
   };
-  const onPlate = (c: string) => c === 'x' || c === 'y';
+  const onPlate = (c: string) => 'xyz'.includes(c);
   const baseHint =
     moves.length === 0
       ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user}, and their moves are fixed.`
-      : onPlate(cellAt(me))
+      : rep.blocked
+        ? 'Your partner is waiting at a door. Open it by standing on the matching ring.'
+        : onPlate(cellAt(me))
         ? 'You are holding a door open for your partner.'
         : onPlate(cellAt(pt))
           ? 'Your partner is holding a door open for you. Go through it.'
@@ -227,8 +222,8 @@ function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
               .split('')
               .map((ch, x) => {
                 const k = COLOR[ch.toLowerCase()];
-                const isPlate = ch === 'x' || ch === 'y';
-                const isDoor = ch === 'X' || ch === 'Y';
+                const isPlate = 'xyz'.includes(ch);
+                const isDoor = 'XYZ'.includes(ch);
                 const pressed = isPlate && (same(me, x + 1, y + 1) || same(pt, x + 1, y + 1));
                 return (
                   <div key={`${x}-${y}`} className={ch === '#' ? 'c wall' : 'c'}>
@@ -271,7 +266,8 @@ function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
           {tutorial ? (
             <>
               <div className="big">Nice!</div>
-              <div className="hint">Lesson {tutorial.n} of {tutorial.total} done in {moves.length} steps.</div>
+              <div style={{ fontSize: 26, color: '#f2b84b' }}>{'★'.repeat(nStars)}{'☆'.repeat(3 - nStars)}</div>
+              <div className="hint">Lesson {tutorial.n} of {tutorial.total} done in {moves.length} steps. Par is {par}.</div>
               <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? "Start today's level" : 'Next lesson'}</button>
             </>
           ) : !res ? (
