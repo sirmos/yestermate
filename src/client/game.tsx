@@ -15,6 +15,7 @@ type St = {
   top: { member: string; score: number }[];
   tutorialDone: boolean;
   recent: string[];
+  day: number;
 };
 type Result = { humans: number; streak: number; practice?: boolean; link?: number; failed?: boolean };
 
@@ -59,20 +60,45 @@ button:active{transform:translateY(2px);box-shadow:none}
 `;
 
 let audio: AudioContext | null = null;
-function beep(freq: number, ms = 90) {
+let soundOn = false;
+let musicOn = false;
+let musicTimer: number | undefined;
+
+function tone(freq: number, ms: number, vol: number, type: OscillatorType) {
   try {
     if (!audio) audio = new AudioContext();
+    const t = audio.currentTime;
     const o = audio.createOscillator();
     const g = audio.createGain();
+    o.type = type;
     o.frequency.value = freq;
-    g.gain.value = 0.04;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
     o.connect(g);
     g.connect(audio.destination);
-    o.start();
-    o.stop(audio.currentTime + ms / 1000);
+    o.start(t);
+    o.stop(t + ms / 1000);
   } catch {
     // Sound is optional.
   }
+}
+const beep = (freq: number, ms = 90) => tone(freq, ms, 0.04, 'sine');
+
+const MELODY = [262, 330, 392, 330, 294, 349, 440, 349, 262, 330, 392, 523, 440, 392, 330, 294];
+function setMusic(on: boolean) {
+  musicOn = on;
+  if (!on) {
+    window.clearInterval(musicTimer);
+    musicTimer = undefined;
+    return;
+  }
+  if (musicTimer !== undefined) return;
+  let i = 0;
+  musicTimer = window.setInterval(() => {
+    tone(MELODY[i % MELODY.length]!, 650, 0.02, 'triangle');
+    if (i % 8 === 0) tone(131, 1400, 0.02, 'sine');
+    i++;
+  }, 450);
 }
 
 function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => void }) {
@@ -84,15 +110,24 @@ function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => v
   );
 }
 
-type Lesson = { n: number; total: number; tip: string; onNext: () => void };
+type Lesson = { n: number; total: number; tip: string; onNext: () => void; name?: string | undefined; endLabel?: string | undefined };
 
-function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
+function Game({ st, tutorial, onBonus }: { st: St; tutorial?: Lesson; onBonus?: () => void }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
   const [tab, setTab] = useState<'play' | 'board'>('play');
   const [tries, setTries] = useState(0);
-  const [sound, setSound] = useState(false);
+  const [sound, setSoundRaw] = useState(soundOn);
+  const [music, setMusicRaw] = useState(musicOn);
+  const setSound = (on: boolean) => {
+    soundOn = on;
+    setSoundRaw(on);
+  };
+  const setMusicState = (on: boolean) => {
+    setMusic(on);
+    setMusicRaw(on);
+  };
 
   const rep = useMemo(() => replay(level, st.role, moves, st.ghost.moves), [level, moves, st]);
   const sim = rep.s;
@@ -204,14 +239,15 @@ function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
       <div className="top">
         <span className="logo">Yester<b>mate</b></span>
         <span className="steps">
-          {tutorial ? `Lesson ${tutorial.n} of ${tutorial.total}` : `Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
+          {tutorial ? `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}` : `Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
         </span>
       </div>
       <div className="top">
         <Tabs tab={tab} setTab={setTab} />
-        <button className="tab" onClick={() => setSound((v) => !v)}>
-          {sound ? 'Sound on' : 'Sound off'}
-        </button>
+        <span>
+          <button className="tab" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
+          <button className="tab" onClick={() => setMusicState(!music)}>{music ? 'Music on' : 'Music off'}</button>
+        </span>
       </div>
 
       <div className={finished ? 'board won' : 'board'} style={{ aspectRatio: `${cols} / ${rows}` }}>
@@ -267,8 +303,8 @@ function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
             <>
               <div className="big">Nice!</div>
               <div style={{ fontSize: 26, color: '#f2b84b' }}>{'★'.repeat(nStars)}{'☆'.repeat(3 - nStars)}</div>
-              <div className="hint">Lesson {tutorial.n} of {tutorial.total} done in {moves.length} steps. Par is {par}.</div>
-              <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? "Start today's level" : 'Next lesson'}</button>
+              <div className="hint">{tutorial.name ?? 'Lesson'} {tutorial.n} of {tutorial.total} done in {moves.length} steps. Par is {par}.</div>
+              <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? (tutorial.endLabel ?? "Start today's level") : `Next ${(tutorial.name ?? 'lesson').toLowerCase()}`}</button>
             </>
           ) : !res ? (
             <div>Adding your run to the chain...</div>
@@ -300,6 +336,7 @@ function Game({ st, tutorial }: { st: St; tutorial?: Lesson }) {
               {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
               <div className="hint">Come back tomorrow to see who used your run.</div>
               <button onClick={() => setMoves('')}>Play again for practice</button>
+              {onBonus && <button onClick={onBonus}>Bonus puzzles with a bot</button>}
             </>
           )}
         </div>
@@ -314,22 +351,25 @@ const TUTORIAL = [
   { rows: LEVELS[1]!, role: 'A' as Role, tip: 'Watch where your partner goes. A door opens for you only while they hold its ring.' },
 ];
 
-function Tutorial({ onDone }: { onDone: () => void }) {
+type Plan = { rows: string[]; role: Role; tip: string };
+
+function Tutorial({ lessons, onDone, name, endLabel }: { lessons: Plan[]; onDone: () => void; name?: string; endLabel?: string }) {
   const [i, setI] = useState(0);
-  const t = TUTORIAL[i]!;
+  const t = lessons[i]!;
   const st = useMemo<St>(() => {
     const sol = solve(parse(t.rows))!;
     const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
-    return { rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [] };
+    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [] };
   }, [t]);
-  const next = () => (i + 1 < TUTORIAL.length ? setI(i + 1) : onDone());
-  return <Game key={i} st={st} tutorial={{ n: i + 1, total: TUTORIAL.length, tip: t.tip, onNext: next }} />;
+  const next = () => (i + 1 < lessons.length ? setI(i + 1) : onDone());
+  return <Game key={i} st={st} tutorial={{ n: i + 1, total: lessons.length, tip: t.tip, onNext: next, name, endLabel }} />;
 }
 
 function App() {
   const [st, setSt] = useState<St | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [bonus, setBonus] = useState(false);
   useEffect(() => {
     fetch('/api/state')
       .then((r) => {
@@ -359,9 +399,17 @@ function App() {
       fetch('/api/tutorial-done', { method: 'POST' }).catch(() => undefined);
       setSt({ ...st, tutorialDone: true });
     };
-    return <Tutorial onDone={done} />;
+    return <Tutorial lessons={TUTORIAL} onDone={done} />;
   }
-  return <Game st={st} />;
+  if (bonus) {
+    const list: Plan[] = Array.from({ length: 5 }, (_, k) => ({
+      rows: LEVELS[1 + ((st.day + k) % (LEVELS.length - 1))]!,
+      role: (k % 2 ? 'B' : 'A') as Role,
+      tip: 'Bonus puzzle. Your partner is a bot, so this does not change the chain.',
+    }));
+    return <Tutorial lessons={list} name="Bonus" endLabel="Back to today's puzzle" onDone={() => setBonus(false)} />;
+  }
+  return <Game st={st} onBonus={() => setBonus(true)} />;
 }
 
 const style = document.createElement('style');

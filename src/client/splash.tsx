@@ -42,7 +42,7 @@ function Mini({ rows, role }: { rows: string[]; role: 'A' | 'B' }) {
   const pt = role === 'A' ? l.b : l.a;
   const myGoal = role === 'A' ? l.ga : l.gb;
   const ptGoal = role === 'A' ? l.gb : l.ga;
-  const door: Record<string, string> = { x: '#e8735a', y: '#8b7be8' };
+  const door: Record<string, string> = { x: '#e8735a', y: '#8b7be8', z: '#4fa3e8' };
   const same = (p: { x: number; y: number }, x: number, y: number) => p.x === x + 1 && p.y === y + 1;
   return (
     <div className="mini" style={{ gridTemplateColumns: `repeat(${cols}, 24px)`, gridTemplateRows: `repeat(${n}, 24px)` }}>
@@ -52,7 +52,7 @@ function Mini({ rows, role }: { rows: string[]; role: 'A' | 'B' }) {
           .split('')
           .map((ch, x) => {
             const k = door[ch.toLowerCase()];
-            const plate = ch === 'x' || ch === 'y';
+            const plate = 'xyz'.includes(ch);
             return (
               <div key={`${x}-${y}`} className={ch === '#' ? 'm w' : 'm'}>
                 {k && plate && <div className="mk" style={{ border: `2px solid ${k}`, borderRadius: '50%' }} />}
