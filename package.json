@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "play-yestermate",
+  "name": "yestermate-puzzle",
   "version": "0.0.0",
   "license": "BSD-3-Clause",
   "type": "module",

@@ -7,13 +7,14 @@ import { LEVELS } from '../shared/levels';
 type St = {
   rows: string[];
   role: Role;
-  ghost: { id: string; moves: string; user: string };
+  ghost: { id: string; moves: string; user: string; at?: number | undefined };
   humans: number;
   played: boolean;
   streak: number;
   uses: number;
   top: { member: string; score: number }[];
   tutorialDone: boolean;
+  partners: Partner[];
   recent: string[];
   day: number;
 };
@@ -52,6 +53,9 @@ button:active{transform:translateY(2px);box-shadow:none}
 .hint{font-size:13px;opacity:.8;line-height:1.45}
 .tab{background:none;box-shadow:none;padding:5px 12px;font-size:13px;border-radius:999px}
 .tab.on{background:#2d3345}
+.vol{display:flex;gap:14px;font-size:12px;opacity:.85}
+.vol label{display:flex;align-items:center;gap:6px;flex:1}
+.vol input{flex:1;accent-color:#f2b84b}
 .rowb{display:flex;justify-content:space-between;font-size:15px}
 @keyframes pulse{50%{opacity:.45}}
 @keyframes hop{50%{transform:translateY(-22%)}}
@@ -62,6 +66,8 @@ button:active{transform:translateY(2px);box-shadow:none}
 let audio: AudioContext | null = null;
 let soundOn = false;
 let musicOn = false;
+let sfxVol = 0.7;
+let musicVol = 0.7;
 let musicTimer: number | undefined;
 
 function tone(freq: number, ms: number, vol: number, type: OscillatorType) {
@@ -82,9 +88,12 @@ function tone(freq: number, ms: number, vol: number, type: OscillatorType) {
     // Sound is optional.
   }
 }
-const beep = (freq: number, ms = 90) => tone(freq, ms, 0.04, 'sine');
+const beep = (freq: number, ms = 90) => tone(freq, ms, 0.3 * sfxVol, 'triangle');
 
-const MELODY = [262, 330, 392, 330, 294, 349, 440, 349, 262, 330, 392, 523, 440, 392, 330, 294];
+const CHORDS = [[262, 330, 392], [220, 262, 330], [175, 220, 262], [196, 247, 294]];
+const BASS = [131, 110, 87, 98];
+const PATTERN = [0, 1, 2, 1, 0, 1, 2, 1, 2, 1, 0, 1, 2, 1, 0, 2];
+let musicStep = 0;
 function setMusic(on: boolean) {
   musicOn = on;
   if (!on) {
@@ -93,13 +102,22 @@ function setMusic(on: boolean) {
     return;
   }
   if (musicTimer !== undefined) return;
-  let i = 0;
   musicTimer = window.setInterval(() => {
-    tone(MELODY[i % MELODY.length]!, 650, 0.02, 'triangle');
-    if (i % 8 === 0) tone(131, 1400, 0.02, 'sine');
-    i++;
-  }, 450);
+    const v = 0.2 * musicVol;
+    const bar = Math.floor(musicStep / 16) % 4;
+    const s = musicStep % 16;
+    tone(CHORDS[bar]![PATTERN[s]!]! * 2, 200, v, 'triangle');
+    if (s % 4 === 0) tone(BASS[bar]!, 320, v * 1.4, 'sine');
+    if (s % 2 === 1) tone(5000, 25, v * 0.2, 'square');
+    musicStep++;
+  }, 190);
 }
+
+const ago = (t?: number) => {
+  if (!t) return '';
+  const m = Math.max(1, Math.round((Date.now() - t) / 60000));
+  return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} hours ago` : `${Math.round(m / 1440)} days ago`;
+};
 
 function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => void }) {
   return (
@@ -110,9 +128,10 @@ function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => v
   );
 }
 
+type Partner = { id: string; role: Role; moves: string; user: string; at: number };
 type Lesson = { n: number; total: number; tip: string; onNext: () => void; name?: string | undefined; endLabel?: string | undefined };
 
-function Game({ st, tutorial, onBonus }: { st: St; tutorial?: Lesson; onBonus?: () => void }) {
+function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
@@ -120,6 +139,8 @@ function Game({ st, tutorial, onBonus }: { st: St; tutorial?: Lesson; onBonus?: 
   const [tries, setTries] = useState(0);
   const [sound, setSoundRaw] = useState(soundOn);
   const [music, setMusicRaw] = useState(musicOn);
+  const [sfx, setSfx] = useState(sfxVol);
+  const [mus, setMus] = useState(musicVol);
   const setSound = (on: boolean) => {
     soundOn = on;
     setSoundRaw(on);
@@ -190,7 +211,7 @@ function Game({ st, tutorial, onBonus }: { st: St; tutorial?: Lesson; onBonus?: 
   const onPlate = (c: string) => 'xyz'.includes(c);
   const baseHint =
     moves.length === 0
-      ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user}, and their moves are fixed.`
+      ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.`
       : rep.blocked
         ? 'Your partner is waiting at a door. Open it by standing on the matching ring.'
         : onPlate(cellAt(me))
@@ -249,6 +270,22 @@ function Game({ st, tutorial, onBonus }: { st: St; tutorial?: Lesson; onBonus?: 
           <button className="tab" onClick={() => setMusicState(!music)}>{music ? 'Music on' : 'Music off'}</button>
         </span>
       </div>
+      {(sound || music) && (
+        <div className="vol">
+          {sound && (
+            <label>
+              Sound
+              <input type="range" min="0" max="1" step="0.05" value={sfx} onChange={(e) => { sfxVol = Number(e.target.value); setSfx(sfxVol); }} />
+            </label>
+          )}
+          {music && (
+            <label>
+              Music
+              <input type="range" min="0" max="1" step="0.05" value={mus} onChange={(e) => { musicVol = Number(e.target.value); setMus(musicVol); }} />
+            </label>
+          )}
+        </div>
+      )}
 
       <div className={finished ? 'board won' : 'board'} style={{ aspectRatio: `${cols} / ${rows}` }}>
         <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
@@ -335,7 +372,7 @@ function Game({ st, tutorial, onBonus }: { st: St; tutorial?: Lesson; onBonus?: 
               <div>Strangers who played with your runs: {st.uses}</div>
               {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
               <div className="hint">Come back tomorrow to see who used your run.</div>
-              <button onClick={() => setMoves('')}>Play again for practice</button>
+              {onPartner ? <button onClick={onPartner}>Play with another stranger</button> : <button onClick={() => setMoves('')}>Play again for practice</button>}
               {onBonus && <button onClick={onBonus}>Bonus puzzles with a bot</button>}
             </>
           )}
@@ -359,7 +396,7 @@ function Tutorial({ lessons, onDone, name, endLabel }: { lessons: Plan[]; onDone
   const st = useMemo<St>(() => {
     const sol = solve(parse(t.rows))!;
     const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
-    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [] };
+    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [] };
   }, [t]);
   const next = () => (i + 1 < lessons.length ? setI(i + 1) : onDone());
   return <Game key={i} st={st} tutorial={{ n: i + 1, total: lessons.length, tip: t.tip, onNext: next, name, endLabel }} />;
@@ -370,6 +407,7 @@ function App() {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [bonus, setBonus] = useState(false);
+  const [pick, setPick] = useState(-1);
   useEffect(() => {
     fetch('/api/state')
       .then((r) => {
@@ -409,7 +447,13 @@ function App() {
     }));
     return <Tutorial lessons={list} name="Bonus" endLabel="Back to today's puzzle" onDone={() => setBonus(false)} />;
   }
-  return <Game st={st} onBonus={() => setBonus(true)} />;
+  const list = st.partners;
+  const chosen = pick >= 0 ? list[pick] : undefined;
+  const dst: St = chosen
+    ? { ...st, role: chosen.role === 'A' ? 'B' : 'A', ghost: { id: chosen.id, moves: chosen.moves, user: chosen.user, at: chosen.at } }
+    : st;
+  const nextPartner = () => setPick((p) => ((p < 0 ? list.length - 1 : p) + 1) % list.length);
+  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
 }
 
 const style = document.createElement('style');

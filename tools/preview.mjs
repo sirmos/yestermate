@@ -53,7 +53,7 @@ createServer((req, res) => {
       day,
       rows: rowsFor(),
       role: c.head.role === 'A' ? 'B' : 'A',
-      ghost: { id: c.head.id, moves: c.head.moves, user: c.head.user },
+      ghost: { id: c.head.id, moves: c.head.moves, user: c.head.user, at: c.head.at ?? 0 },
       humans: c.humans,
       played: c.played,
       streak,
@@ -61,6 +61,7 @@ createServer((req, res) => {
       top,
       tutorialDone,
       recent: ['mara_k', 'tolu_b'],
+      partners: [...links.values()].filter((l) => l.id.startsWith(`${day}-`)).map((l) => ({ ...l, at: l.at ?? 0 })),
     });
   }
 
@@ -77,7 +78,7 @@ createServer((req, res) => {
       if (!validate(parse(rowsFor()), role, moves, ghost.moves).won) return send(res, 400, { ok: false });
       if (c.played) return send(res, 200, { ok: true, humans: c.humans, streak, practice: true });
       const clean = replay(parse(rowsFor()), role, moves, ghost.moves).eff.replace(/0+$/, '');
-      const link = { id: `${day}-${c.humans + 1}`, role, moves: clean, user: 'you' };
+      const link = { id: `${day}-${c.humans + 1}`, role, moves: clean, user: 'you', at: Date.now() };
       links.set(link.id, link);
       c.head = link;
       c.humans += 1;

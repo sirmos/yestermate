@@ -10,7 +10,7 @@ export const api = new Hono();
 const DAY0 = Date.UTC(2026, 10, 11);
 const today = () => Math.floor((Date.now() - DAY0) / 86400000);
 
-type Link = { id: string; role: Role; moves: string; user: string };
+type Link = { id: string; role: Role; moves: string; user: string; at?: number };
 type Chain = { head: Link; humans: number };
 
 async function getJson<T>(key: string): Promise<T | null> {
@@ -29,6 +29,7 @@ async function chainFor(day: number): Promise<Chain> {
   const head: Link = { id: `${day}-0`, role: 'B', moves: s.b, user: 'bot' };
   const fresh: Chain = { head, humans: 0 };
   await redis.set(`link:${head.id}`, JSON.stringify(head));
+  await redis.set(`ids:${day}`, JSON.stringify([head.id]));
   await redis.set(`chain:${day}`, JSON.stringify(fresh));
   return fresh;
 }
@@ -42,13 +43,18 @@ api.get('/state', async (c) => {
   const streak = await getJson<{ last: number; count: number }>(`streak:${user}`);
   const uses = Number((await redis.get(`uses:${user}`)) ?? 0);
   const top = await redis.zRange('board:uses', 0, 9, { by: 'rank', reverse: true });
+  const ids = (await getJson<string[]>(`ids:${day}`)) ?? [chain.head.id];
+  const found = await Promise.all(ids.map((id) => getJson<Link>(`link:${id}`)));
+  const partners = found
+    .filter((l): l is Link => !!l)
+    .map((l) => ({ id: l.id, role: l.role, moves: l.moves, user: l.user, at: l.at ?? 0 }));
   const tutorialDone = !!(await redis.get(`tutorial:${user}`));
   const recent = (await getJson<string[]>(`recent:${user}`)) ?? [];
   return c.json({
     day,
     rows: LEVELS[day % LEVELS.length]!,
     role,
-    ghost: { id: chain.head.id, moves: chain.head.moves, user: chain.head.user },
+    ghost: { id: chain.head.id, moves: chain.head.moves, user: chain.head.user, at: chain.head.at ?? 0 },
     humans: chain.humans,
     played: !!played,
     streak: streak && streak.last >= day - 1 ? streak.count : 0,
@@ -56,6 +62,7 @@ api.get('/state', async (c) => {
     top,
     tutorialDone,
     recent,
+    partners,
   });
 });
 
@@ -86,8 +93,10 @@ api.post('/submit', async (c) => {
   }
 
   const clean = replay(levelForDay(day), role, moves, ghost.moves).eff.replace(/0+$/, '');
-  const link: Link = { id: `${day}-${chain.humans + 1}`, role, moves: clean, user };
+  const link: Link = { id: `${day}-${chain.humans + 1}`, role, moves: clean, user, at: Date.now() };
   await redis.set(`link:${link.id}`, JSON.stringify(link));
+  const ids = (await getJson<string[]>(`ids:${day}`)) ?? [];
+  await redis.set(`ids:${day}`, JSON.stringify([...ids, link.id].slice(-13)));
   await redis.set(`chain:${day}`, JSON.stringify({ head: link, humans: chain.humans + 1 }));
   await redis.set(`played:${day}:${user}`, JSON.stringify({ link: link.id }));
 
