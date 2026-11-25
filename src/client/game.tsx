@@ -3,6 +3,7 @@ import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { context, navigateTo } from '@devvit/web/client';
 import { Chain, chainCss } from './chain';
+import { setMusic as setMusicEngine, setMusicVol } from './music';
 import { MAX_TICKS, minSteps, parse, replay, solve, type Role } from '../shared/sim';
 import { LEVELS } from '../shared/levels';
 
@@ -76,7 +77,6 @@ let soundOn = false;
 let musicOn = false;
 let sfxVol = 0.7;
 let musicVol = 0.7;
-let musicTimer: number | undefined;
 
 function tone(freq: number, ms: number, vol: number, type: OscillatorType) {
   try {
@@ -98,27 +98,9 @@ function tone(freq: number, ms: number, vol: number, type: OscillatorType) {
 }
 const beep = (freq: number, ms = 90) => tone(freq, ms, 0.3 * sfxVol, 'triangle');
 
-const CHORDS = [[262, 330, 392], [220, 262, 330], [175, 220, 262], [196, 247, 294]];
-const BASS = [131, 110, 87, 98];
-const PATTERN = [0, 1, 2, 1, 0, 1, 2, 1, 2, 1, 0, 1, 2, 1, 0, 2];
-let musicStep = 0;
 function setMusic(on: boolean) {
   musicOn = on;
-  if (!on) {
-    window.clearInterval(musicTimer);
-    musicTimer = undefined;
-    return;
-  }
-  if (musicTimer !== undefined) return;
-  musicTimer = window.setInterval(() => {
-    const v = 0.2 * musicVol;
-    const bar = Math.floor(musicStep / 16) % 4;
-    const s = musicStep % 16;
-    tone(CHORDS[bar]![PATTERN[s]!]! * 2, 200, v, 'triangle');
-    if (s % 4 === 0) tone(BASS[bar]!, 320, v * 1.4, 'sine');
-    if (s % 2 === 1) tone(5000, 25, v * 0.2, 'square');
-    musicStep++;
-  }, 190);
+  setMusicEngine(on);
 }
 
 const ago = (t?: number) => {
@@ -320,7 +302,7 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
           {music && (
             <label>
               Music
-              <input type="range" min="0" max="1" step="0.05" value={mus} onChange={(e) => { musicVol = Number(e.target.value); setMus(musicVol); }} />
+              <input type="range" min="0" max="1" step="0.05" value={mus} onChange={(e) => { musicVol = Number(e.target.value); setMus(musicVol); setMusicVol(musicVol); }} />
             </label>
           )}
         </div>
