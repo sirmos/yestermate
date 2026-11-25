@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "yestermate-puzzle",
+  "name": "yestermate",
   "post": {
     "dir": "dist/client",
     "entrypoints": {
@@ -36,6 +36,6 @@
     "build": "vite build"
   },
   "dev": {
-    "subreddit": "ymate_puzzle_dev"
+    "subreddit": "yestermate_dev"
   }
 }
