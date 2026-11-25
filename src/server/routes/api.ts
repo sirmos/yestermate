@@ -48,6 +48,7 @@ api.get('/state', async (c) => {
   const partners = found
     .filter((l): l is Link => !!l)
     .map((l) => ({ id: l.id, role: l.role, moves: l.moves, user: l.user, at: l.at ?? 0 }));
+  const thanks = Number((await redis.get(`thanks:${user}`)) ?? 0);
   const tutorialDone = !!(await redis.get(`tutorial:${user}`));
   const recent = (await getJson<string[]>(`recent:${user}`)) ?? [];
   return c.json({
@@ -63,6 +64,7 @@ api.get('/state', async (c) => {
     tutorialDone,
     recent,
     partners,
+    thanks,
   });
 });
 
@@ -118,4 +120,16 @@ api.post('/submit', async (c) => {
     // Flair needs permission in the subreddit. The game works without it.
   }
   return c.json({ ok: true, humans: chain.humans + 1, streak: count, ticks: result.ticks, link: n });
+});
+
+api.post('/thanks', async (c) => {
+  const user = await who();
+  const { ghostId } = await c.req.json<{ ghostId: string }>();
+  const ghost = await getJson<Link>(`link:${ghostId}`);
+  if (!ghost || ghost.user === 'bot' || ghost.user === user) return c.json({ ok: false }, 400);
+  const once = `thanked:${ghostId}:${user}`;
+  if (await redis.get(once)) return c.json({ ok: true, already: true });
+  await redis.set(once, '1');
+  await redis.incrBy(`thanks:${ghost.user}`, 1);
+  return c.json({ ok: true });
 });

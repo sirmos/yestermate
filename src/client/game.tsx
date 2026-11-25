@@ -1,6 +1,7 @@
 import './index.css';
 import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { context, navigateTo } from '@devvit/web/client';
 import { MAX_TICKS, minSteps, parse, replay, solve, type Role } from '../shared/sim';
 import { LEVELS } from '../shared/levels';
 
@@ -15,6 +16,7 @@ type St = {
   top: { member: string; score: number }[];
   tutorialDone: boolean;
   partners: Partner[];
+  thanks: number;
   recent: string[];
   day: number;
 };
@@ -56,6 +58,9 @@ button:active{transform:translateY(2px);box-shadow:none}
 .vol{display:flex;gap:14px;font-size:12px;opacity:.85}
 .vol label{display:flex;align-items:center;gap:6px;flex:1}
 .vol input{flex:1;accent-color:#f2b84b}
+.two{display:flex;gap:8px}
+.two button{flex:1;font-size:15px}
+button:disabled{opacity:.55}
 .rowb{display:flex;justify-content:space-between;font-size:15px}
 @keyframes pulse{50%{opacity:.45}}
 @keyframes hop{50%{transform:translateY(-22%)}}
@@ -136,6 +141,7 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
   const [tab, setTab] = useState<'play' | 'board'>('play');
+  const [thanked, setThanked] = useState(false);
   const [tries, setTries] = useState(0);
   const [sound, setSoundRaw] = useState(soundOn);
   const [music, setMusicRaw] = useState(musicOn);
@@ -155,6 +161,22 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
 
   const finished = sim.da && sim.db;
   const par = useMemo(() => minSteps(level, st.role, st.ghost.moves), [level, st]);
+  const human = st.ghost.user !== 'bot';
+  const postId = (() => {
+    try {
+      return context.postId;
+    } catch {
+      return undefined;
+    }
+  })();
+  const sayThanks = () => {
+    setThanked(true);
+    fetch('/api/thanks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ghostId: st.ghost.id }),
+    }).catch(() => undefined);
+  };
   const nStars = par ? (moves.length <= par ? 3 : moves.length <= par + 2 ? 2 : 1) : 1;
   useEffect(() => {
     if (finished && sound) [523, 659, 784].forEach((f, i) => setTimeout(() => beep(f, 160), i * 140));
@@ -370,8 +392,26 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
               </div>
               <div>Streak: {res.streak} day{res.streak === 1 ? '' : 's'}</div>
               <div>Strangers who played with your runs: {st.uses}</div>
+              {st.thanks > 0 && <div className="hint">Thank-yous from partners: {st.thanks}</div>}
               {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
               <div className="hint">Come back tomorrow to see who used your run.</div>
+              {(human || postId) && (
+                <>
+                  {human && <div className="hint">Tell u/{st.ghost.user} how it went.</div>}
+                  <div className="two">
+                    {human && (
+                      <button disabled={thanked} onClick={sayThanks}>
+                        {thanked ? 'Thanks sent' : 'Say thanks'}
+                      </button>
+                    )}
+                    {postId && (
+                      <button onClick={() => navigateTo(`https://www.reddit.com/comments/${postId.replace(/^t3_/, '')}`)}>
+                        Comment
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
               {onPartner ? <button onClick={onPartner}>Play with another stranger</button> : <button onClick={() => setMoves('')}>Play again for practice</button>}
               {onBonus && <button onClick={onBonus}>Bonus puzzles with a bot</button>}
             </>
@@ -396,7 +436,7 @@ function Tutorial({ lessons, onDone, name, endLabel }: { lessons: Plan[]; onDone
   const st = useMemo<St>(() => {
     const sol = solve(parse(t.rows))!;
     const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
-    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [] };
+    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0 };
   }, [t]);
   const next = () => (i + 1 < lessons.length ? setI(i + 1) : onDone());
   return <Game key={i} st={st} tutorial={{ n: i + 1, total: lessons.length, tip: t.tip, onNext: next, name, endLabel }} />;

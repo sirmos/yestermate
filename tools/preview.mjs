@@ -61,6 +61,7 @@ createServer((req, res) => {
       top,
       tutorialDone,
       recent: ['mara_k', 'tolu_b'],
+      thanks: 2,
       partners: [...links.values()].filter((l) => l.id.startsWith(`${day}-`)).map((l) => ({ ...l, at: l.at ?? 0 })),
     });
   }
@@ -90,6 +91,7 @@ createServer((req, res) => {
     return;
   }
 
+  if (path === '/api/thanks') return send(res, 200, { ok: true });
   if (path === '/api/tutorial-done') {
     tutorialDone = true;
     return send(res, 200, { ok: true });
