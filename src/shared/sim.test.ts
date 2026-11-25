@@ -8,7 +8,7 @@ import { LEVELS } from './levels.ts';
 
 // Can one player finish while the partner just waits?
 function alone(l: Level, role: 'A' | 'B'): boolean {
-  const key = (s: ReturnType<typeof start>) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y},${+s.da}${+s.db}`;
+  const key = (s: ReturnType<typeof start>) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y},${+s.da}${+s.db},${s.t % 4}`;
   const first = start(l);
   const seen = new Set([key(first)]);
   let layer = [first];
@@ -61,4 +61,9 @@ test('par matches the solver when the partner follows the solution', () => {
     assert.equal(minSteps(l, 'A', s.b), s.a.length, `level ${i}: par for A`);
     assert.equal(minSteps(l, 'B', s.a), s.a.length, `level ${i}: par for B`);
   });
+});
+
+test('some levels use silver gates', () => {
+  const gated = LEVELS.filter((rows) => rows.join('').includes('T')).length;
+  assert.ok(gated >= 8, `only ${gated} gated levels`);
 });

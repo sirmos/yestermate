@@ -5,7 +5,7 @@
 export type Role = 'A' | 'B';
 export type P = { x: number; y: number };
 export type Level = { cells: string[]; a: P; b: P; ga: P; gb: P };
-export type S = { a: P; b: P; da: boolean; db: boolean };
+export type S = { a: P; b: P; da: boolean; db: boolean; t: number };
 
 export const MAX_TICKS = 90;
 const DX = [0, 0, 0, -1, 1];
@@ -33,6 +33,7 @@ const at = (l: Level, p: P) => l.cells[p.y]?.[p.x] ?? '#';
 function passable(l: Level, s: S, x: number, y: number, mover: 'a' | 'b'): boolean {
   const c = at(l, { x, y });
   if (c === '#') return false;
+  if (c === 'T') return s.t % 4 < 2; // silver gate: open two steps, closed two
   if (c === 'X' || c === 'Y' || c === 'Z') {
     const plate = c.toLowerCase();
     return at(l, mover === 'a' ? s.b : s.a) === plate;
@@ -47,7 +48,7 @@ function move(l: Level, s: S, p: P, m: number, done: boolean, mover: 'a' | 'b'):
 }
 
 export function start(l: Level): S {
-  return { a: l.a, b: l.b, da: false, db: false };
+  return { a: l.a, b: l.b, da: false, db: false, t: 0 };
 }
 
 export function step(l: Level, s: S, ma: number, mb: number): S {
@@ -58,6 +59,7 @@ export function step(l: Level, s: S, ma: number, mb: number): S {
     b,
     da: s.da || (a.x === l.ga.x && a.y === l.ga.y),
     db: s.db || (b.x === l.gb.x && b.y === l.gb.y),
+    t: s.t + 1,
   };
 }
 
@@ -135,7 +137,7 @@ export function minSteps(l: Level, role: Role, ghost: string): number | null {
 
 // Breadth first search over joint states. Used to build the bot seed chain.
 export function solve(l: Level): { a: string; b: string } | null {
-  const key = (s: S) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y},${+s.da}${+s.db}`;
+  const key = (s: S) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y},${+s.da}${+s.db},${s.t % 4}`;
   const first = start(l);
   const seen = new Map<string, [string, number, number] | null>([[key(first), null]]);
   let layer: S[] = [first];

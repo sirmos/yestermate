@@ -2,6 +2,7 @@ import './index.css';
 import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { context, navigateTo } from '@devvit/web/client';
+import { Chain, chainCss } from './chain';
 import { MAX_TICKS, minSteps, parse, replay, solve, type Role } from '../shared/sim';
 import { LEVELS } from '../shared/levels';
 
@@ -41,6 +42,7 @@ body{margin:0;background:radial-gradient(120% 70% at 50% 0%,#222838 0%,#14161c 6
 .grid{position:absolute;inset:0;display:grid}
 .c{position:relative;border-radius:10px;background:#272c3b;box-shadow:inset 0 0 0 2px #171a22}
 .c.wall{background:#0d0f14}
+.gate{background:repeating-linear-gradient(45deg,#cfd6e6 0 4px,#8892aa 4px 8px)}
 .plate{position:absolute;inset:27%;border-radius:50%;border:3px solid;transition:background .12s}
 .door{position:absolute;inset:6% 24%;border-radius:6px;transition:opacity .15s}
 .goal{position:absolute;inset:13%;border-radius:11px;border:2px dashed;animation:pulse 2.2s ease-in-out infinite}
@@ -58,6 +60,7 @@ button:active{transform:translateY(2px);box-shadow:none}
 .vol{display:flex;gap:14px;font-size:12px;opacity:.85}
 .vol label{display:flex;align-items:center;gap:6px;flex:1}
 .vol input{flex:1;accent-color:#f2b84b}
+.share{white-space:pre-line;background:#171a22;border-radius:10px;padding:8px 10px;font-size:13px;user-select:all}
 .two{display:flex;gap:8px}
 .two button{flex:1;font-size:15px}
 button:disabled{opacity:.55}
@@ -142,6 +145,7 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
   const [res, setRes] = useState<Result | null>(null);
   const [tab, setTab] = useState<'play' | 'board'>('play');
   const [thanked, setThanked] = useState(false);
+  const [copied, setCopied] = useState<'no' | 'ok' | 'fail'>('no');
   const [tries, setTries] = useState(0);
   const [sound, setSoundRaw] = useState(soundOn);
   const [music, setMusicRaw] = useState(musicOn);
@@ -178,6 +182,17 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
     }).catch(() => undefined);
   };
   const nStars = par ? (moves.length <= par ? 3 : moves.length <= par + 2 ? 2 : 1) : 1;
+  const shareText = `Yestermate #${st.day + 1} ${'★'.repeat(nStars)}${'☆'.repeat(3 - nStars)}\n${moves.length} steps, par ${par ?? '?'}${human ? `, with u/${st.ghost.user}` : ''}`;
+  const copyResult = () => {
+    try {
+      navigator.clipboard
+        .writeText(shareText)
+        .then(() => setCopied('ok'))
+        .catch(() => setCopied('fail'));
+    } catch {
+      setCopied('fail');
+    }
+  };
   useEffect(() => {
     if (finished && sound) [523, 659, 784].forEach((f, i) => setTimeout(() => beep(f, 160), i * 140));
     // Plays once when the level is finished.
@@ -235,14 +250,16 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
     moves.length === 0
       ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.`
       : rep.blocked
-        ? 'Your partner is waiting at a door. Open it by standing on the matching ring.'
+        ? 'Your partner is waiting at a door. Open it by standing on its ring, or wait for the silver gate to open.'
         : onPlate(cellAt(me))
         ? 'You are holding a door open for your partner.'
         : onPlate(cellAt(pt))
           ? 'Your partner is holding a door open for you. Go through it.'
           : moves.length >= 12
             ? 'Stuck? Try waiting a step so your partner gets into place. Restart is free.'
-            : 'A door opens only while your partner stands on its plate.';
+            : level.cells.some((r) => r.includes('T'))
+              ? 'Silver gates open for two steps, then close for two. Time your crossing to the beat.'
+              : 'A door opens only while your partner stands on its plate.';
   const hintText = tutorial && moves.length === 0 ? tutorial.tip : baseHint;
 
   if (tab === 'board') {
@@ -319,10 +336,12 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
                 const k = COLOR[ch.toLowerCase()];
                 const isPlate = 'xyz'.includes(ch);
                 const isDoor = 'XYZ'.includes(ch);
+                const isGate = ch === 'T';
                 const pressed = isPlate && (same(me, x + 1, y + 1) || same(pt, x + 1, y + 1));
                 return (
                   <div key={`${x}-${y}`} className={ch === '#' ? 'c wall' : 'c'}>
                     {isPlate && <div className="plate" style={{ borderColor: k, background: pressed ? k : 'transparent' }} />}
+                    {isGate && <div className="door gate" style={{ opacity: sim.t % 4 < 2 ? 0.15 : 1 }} />}
                     {isDoor && <div className="door" style={{ background: k, opacity: doorOpacity(ch) }} />}
                     {same(myGoal, x + 1, y + 1) && <div className="goal" style={{ borderColor: ME }} />}
                     {same(ptGoal, x + 1, y + 1) && <div className="goal" style={{ borderColor: PARTNER }} />}
@@ -395,6 +414,9 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
               {st.thanks > 0 && <div className="hint">Thank-yous from partners: {st.thanks}</div>}
               {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
               <div className="hint">Come back tomorrow to see who used your run.</div>
+              {!res.practice && <Chain partners={st.partners} joined />}
+              <button onClick={copyResult}>{copied === 'ok' ? 'Result copied' : 'Copy result to share'}</button>
+              {copied === 'fail' && <div className="share">{shareText}</div>}
               {(human || postId) && (
                 <>
                   {human && <div className="hint">Tell u/{st.ghost.user} how it went.</div>}
@@ -497,7 +519,7 @@ function App() {
 }
 
 const style = document.createElement('style');
-style.textContent = css;
+style.textContent = css + chainCss;
 document.head.appendChild(style);
 
 createRoot(document.getElementById('root')!).render(

@@ -11,7 +11,8 @@ Built with Devvit Web for Reddit's Game of the Day hackathon.
 3. Every move you make is one step for both of you. Use the arrow keys, WASD, or the buttons. The middle button waits one step.
 4. Your partner's moves are fixed. You choose when to move and when to wait.
 5. A door opens only while your partner stands on its matching plate. You can never open your own door, so you must hold the doors for them in the same way.
-6. Reach your goal while your partner reaches theirs.
+6. Silver gates need no plate. They open for two steps, then close for two, on a steady beat. Time your crossing to it.
+7. Reach your goal while your partner reaches theirs.
 
 New players start with three short lessons. There is no timer. Each level has a par, and finishing in fewer steps earns up to three stars.
 
