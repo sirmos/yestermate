@@ -230,9 +230,10 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished]);
   const par = useMemo(() => minSteps(level, st.role, st.ghost.moves), [level, st]);
+  const wordMode = !tutorial || tutorial.name === 'Level' || tutorial.name === 'Weekly Boss';
   const word = WORDS[st.day % WORDS.length]!;
-  const letters = useMemo(() => (tutorial ? [] : placeLetters(level, word[0], st.day)), [level, word, st.day, tutorial]);
-  const tr = useMemo(() => (tutorial ? { a: [], b: [] } : trail(level, st.role, moves, st.ghost.moves)), [level, moves, st, tutorial]);
+  const letters = useMemo(() => (wordMode ? placeLetters(level, word[0], st.day) : []), [level, word, st.day, wordMode]);
+  const tr = useMemo(() => (wordMode ? trail(level, st.role, moves, st.ghost.moves) : { a: [], b: [] }), [level, moves, st, wordMode]);
   const mineTrail = st.role === 'A' ? tr.a : tr.b;
   const theirTrail = st.role === 'A' ? tr.b : tr.a;
   const hit = (path: { x: number; y: number }[], q: { x: number; y: number }) => path.some((p) => p.x === q.x && p.y === q.y);
@@ -240,6 +241,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const slotView = [...word[0]].map((c, i) => ({ c, by: got.find((g) => g.slot === i)?.by ?? '' }));
   const wordShown = slotView.map((v) => (v.by ? v.c : '_')).join('');
   const wordDone = letters.length > 0 && got.every((g) => g.by);
+  const wordLine = wordDone ? `Word found: ${word[0]}.` : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${got.filter((g) => !g.by).length} letters missed.`;
   const human = st.ghost.user !== 'bot';
   const postId = (() => {
     try {
@@ -328,7 +330,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const onPlate = (c: string) => 'xyz'.includes(c);
   const baseHint =
     moves.length === 0
-      ? `Each move is one step for you and your yestermate. Your yestermate is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.`
+      ? `Each move is one step for you and your yestermate. Your yestermate is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.${tutorial ? '' : ' Walk over the glowing letters to spell the answer to the riddle.'}`
       : rep.blocked
         ? 'Your yestermate is waiting at the glowing door. Stand on the glowing ring to open it. For a silver gate, just wait for the beat.'
         : onPlate(cellAt(me))
@@ -410,7 +412,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
         </div>
       )}
 
-      {!tutorial && (
+      {wordMode && (
         <div className="wordbox">
           <div className="wordbar">
             {slotView.map((v, i) => (
@@ -479,6 +481,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
             <>
               <div className="big">Nice!</div>
               <Stars n={nStars} />
+              {wordMode && <div className="hint">{wordLine}</div>}
               <div className="hint">{tutorial.total === 1 ? 'Done' : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total} done`} in {moves.length} steps. Par is {par}.</div>
               <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? (tutorial.endLabel ?? "Start today's level") : `Next ${(tutorial.name ?? 'lesson').toLowerCase()}`}</button>
               {tutorial.onBack && <button onClick={tutorial.onBack}>Level map</button>}
