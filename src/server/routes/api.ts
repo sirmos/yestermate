@@ -48,6 +48,14 @@ api.get('/state', async (c) => {
   const partners = found
     .filter((l): l is Link => !!l)
     .map((l) => ({ id: l.id, role: l.role, moves: l.moves, user: l.user, at: l.at ?? 0 }));
+  const yChain = day > 0 ? await chainFor(day - 1) : null;
+  const yesterday = yChain
+    ? {
+        rows: LEVELS[(day - 1) % LEVELS.length]!,
+        role: (yChain.head.role === 'A' ? 'B' : 'A') as Role,
+        ghost: { id: yChain.head.id, moves: yChain.head.moves, user: yChain.head.user, at: yChain.head.at ?? 0 },
+      }
+    : null;
   const thanks = Number((await redis.get(`thanks:${user}`)) ?? 0);
   const tutorialDone = !!(await redis.get(`tutorial:${user}`));
   const recent = (await getJson<string[]>(`recent:${user}`)) ?? [];
@@ -65,6 +73,7 @@ api.get('/state', async (c) => {
     recent,
     partners,
     thanks,
+    yesterday,
   });
 });
 

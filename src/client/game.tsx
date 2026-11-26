@@ -19,6 +19,7 @@ type St = {
   tutorialDone: boolean;
   partners: Partner[];
   thanks: number;
+  yesterday: { rows: string[]; role: Role; ghost: { id: string; moves: string; user: string; at?: number | undefined } } | null;
   recent: string[];
   day: number;
 };
@@ -44,6 +45,8 @@ body{margin:0;background:radial-gradient(120% 70% at 50% 0%,#222838 0%,#14161c 6
 .c{position:relative;border-radius:10px;background:#272c3b;box-shadow:inset 0 0 0 2px #171a22}
 .c.wall{background:#0d0f14}
 .gate{background:repeating-linear-gradient(45deg,#cfd6e6 0 4px,#8892aa 4px 8px)}
+.ask{animation:ask .9s ease-in-out infinite}
+@keyframes ask{50%{box-shadow:inset 0 0 0 3px #f2b84b}}
 .plate{position:absolute;inset:27%;border-radius:50%;border:3px solid;transition:background .12s}
 .door{position:absolute;inset:6% 24%;border-radius:6px;transition:opacity .15s}
 .goal{position:absolute;inset:13%;border-radius:11px;border:2px dashed;animation:pulse 2.2s ease-in-out infinite}
@@ -121,7 +124,7 @@ function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => v
 type Partner = { id: string; role: Role; moves: string; user: string; at: number };
 type Lesson = { n: number; total: number; tip: string; onNext: () => void; name?: string | undefined; endLabel?: string | undefined };
 
-function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void }) {
+function Game({ st, tutorial, onBonus, onPartner, onYesterday }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void; onYesterday?: () => void }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
@@ -227,12 +230,17 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
     if (cellAt(me) === plate) return 0.5;
     return 1;
   };
+  const D = [[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]] as const;
+  const gp = st.role === 'A' ? sim.b : sim.a;
+  const gm = Number(st.ghost.moves[rep.ptr] ?? '0');
+  const waitTarget = rep.blocked && gm > 0 ? { x: gp.x + D[gm]![0], y: gp.y + D[gm]![1] } : null;
+  const waitCell = waitTarget ? cellAt(waitTarget) : '';
   const onPlate = (c: string) => 'xyz'.includes(c);
   const baseHint =
     moves.length === 0
-      ? `Each move is one step for you and your partner. Your partner is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.`
+      ? `Each move is one step for you and your yestermate. Your yestermate is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.`
       : rep.blocked
-        ? 'Your partner is waiting at a door. Open it by standing on its ring, or wait for the silver gate to open.'
+        ? 'Your yestermate is waiting at the glowing door. Stand on the glowing ring to open it. For a silver gate, just wait for the beat.'
         : onPlate(cellAt(me))
         ? 'You are holding a door open for your partner.'
         : onPlate(cellAt(pt))
@@ -281,7 +289,7 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
       <div className="top">
         <span className="logo">Yester<b>mate</b></span>
         <span className="steps">
-          {tutorial ? `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}` : `Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
+          {tutorial ? (tutorial.total === 1 ? (tutorial.name ?? 'Lesson') : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}`) : `Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
         </span>
       </div>
       <div className="top">
@@ -319,9 +327,10 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
                 const isPlate = 'xyz'.includes(ch);
                 const isDoor = 'XYZ'.includes(ch);
                 const isGate = ch === 'T';
+                const ask = !!waitTarget && (same(waitTarget, x + 1, y + 1) || ('XYZ'.includes(waitCell) && ch === waitCell.toLowerCase()));
                 const pressed = isPlate && (same(me, x + 1, y + 1) || same(pt, x + 1, y + 1));
                 return (
-                  <div key={`${x}-${y}`} className={ch === '#' ? 'c wall' : 'c'}>
+                  <div key={`${x}-${y}`} className={(ch === '#' ? 'c wall' : 'c') + (ask ? ' ask' : '')}>
                     {isPlate && <div className="plate" style={{ borderColor: k, background: pressed ? k : 'transparent' }} />}
                     {isGate && <div className="door gate" style={{ opacity: sim.t % 4 < 2 ? 0.15 : 1 }} />}
                     {isDoor && <div className="door" style={{ background: k, opacity: doorOpacity(ch) }} />}
@@ -363,7 +372,7 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
             <>
               <div className="big">Nice!</div>
               <div style={{ fontSize: 26, color: '#f2b84b' }}>{'★'.repeat(nStars)}{'☆'.repeat(3 - nStars)}</div>
-              <div className="hint">{tutorial.name ?? 'Lesson'} {tutorial.n} of {tutorial.total} done in {moves.length} steps. Par is {par}.</div>
+              <div className="hint">{tutorial.total === 1 ? 'Done' : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total} done`} in {moves.length} steps. Par is {par}.</div>
               <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? (tutorial.endLabel ?? "Start today's level") : `Next ${(tutorial.name ?? 'lesson').toLowerCase()}`}</button>
             </>
           ) : !res ? (
@@ -395,7 +404,7 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
               <div>Strangers who played with your runs: {st.uses}</div>
               {st.thanks > 0 && <div className="hint">Thank-yous from partners: {st.thanks}</div>}
               {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
-              <div className="hint">Come back tomorrow to see who used your run.</div>
+              <div className="hint">Your run is now someone's yestermate. Come back tomorrow to see who used it.</div>
               {!res.practice && <Chain partners={st.partners} joined />}
               <button onClick={copyResult}>{copied === 'ok' ? 'Result copied' : 'Copy result to share'}</button>
               {copied === 'fail' && <div className="share">{shareText}</div>}
@@ -417,6 +426,7 @@ function Game({ st, tutorial, onBonus, onPartner }: { st: St; tutorial?: Lesson;
                 </>
               )}
               {onPartner ? <button onClick={onPartner}>Play with another stranger</button> : <button onClick={() => setMoves('')}>Play again for practice</button>}
+              {onYesterday && <button onClick={onYesterday}>Yesterday's puzzle, with yesterday's mate</button>}
               {onBonus && <button onClick={onBonus}>Bonus puzzles with a bot</button>}
             </>
           )}
@@ -440,7 +450,7 @@ function Tutorial({ lessons, onDone, name, endLabel }: { lessons: Plan[]; onDone
   const st = useMemo<St>(() => {
     const sol = solve(parse(t.rows))!;
     const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
-    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0 };
+    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0, yesterday: null };
   }, [t]);
   const next = () => (i + 1 < lessons.length ? setI(i + 1) : onDone());
   return <Game key={i} st={st} tutorial={{ n: i + 1, total: lessons.length, tip: t.tip, onNext: next, name, endLabel }} />;
@@ -451,6 +461,7 @@ function App() {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [bonus, setBonus] = useState(false);
+  const [yday, setYday] = useState(false);
   const [pick, setPick] = useState(-1);
   useEffect(() => {
     fetch('/api/state')
@@ -483,6 +494,18 @@ function App() {
     };
     return <Tutorial lessons={TUTORIAL} onDone={done} />;
   }
+  if (yday && st.yesterday) {
+    const y = st.yesterday;
+    const yst: St = { ...st, day: st.day - 1, rows: y.rows, role: y.role, ghost: y.ghost };
+    const who = y.ghost.user === 'bot' ? 'a bot' : `u/${y.ghost.user}`;
+    return (
+      <Game
+        key="yesterday"
+        st={yst}
+        tutorial={{ n: 1, total: 1, tip: `Yesterday's puzzle. Your yestermate is ${who}.`, name: 'Yesterday', endLabel: 'Back to today', onNext: () => setYday(false) }}
+      />
+    );
+  }
   if (bonus) {
     const list: Plan[] = Array.from({ length: 5 }, (_, k) => ({
       rows: LEVELS[1 + ((st.day + k) % (LEVELS.length - 1))]!,
@@ -497,7 +520,7 @@ function App() {
     ? { ...st, role: chosen.role === 'A' ? 'B' : 'A', ghost: { id: chosen.id, moves: chosen.moves, user: chosen.user, at: chosen.at } }
     : st;
   const nextPartner = () => setPick((p) => ((p < 0 ? list.length - 1 : p) + 1) % list.length);
-  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
+  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} {...(st.yesterday ? { onYesterday: () => setYday(true) } : {})} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
 }
 
 const style = document.createElement('style');
