@@ -140,6 +140,17 @@ const ago = (t?: number) => {
   return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} hours ago` : `${Math.round(m / 1440)} days ago`;
 };
 
+function difficultyOf(rows: string[], par: number | null) {
+  const flat = rows.join('');
+  const doors = ['X', 'Y', 'Z'].filter((d) => flat.includes(d)).length;
+  const gate = flat.includes('T');
+  const p = par ?? 0;
+  if (p >= 14 || (gate && doors >= 2)) return 'Expert';
+  if (p >= 12 || gate) return 'Hard';
+  if (p >= 10) return 'Medium';
+  return 'Easy';
+}
+
 function Stars({ n }: { n: number }) {
   return (
     <div className="stars">
@@ -206,6 +217,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const [tab, setTab] = useState<'play' | 'board'>('play');
   const [thanked, setThanked] = useState(false);
   const [copied, setCopied] = useState<'no' | 'ok' | 'fail'>('no');
+  const [posted, setPosted] = useState(false);
   const [tries, setTries] = useState(0);
   const [sound, setSoundRaw] = useState(soundOn);
   const [music, setMusicRaw] = useState(musicOn);
@@ -241,6 +253,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const slotView = [...word[0]].map((c, i) => ({ c, by: got.find((g) => g.slot === i)?.by ?? '' }));
   const wordShown = slotView.map((v) => (v.by ? v.c : '_')).join('');
   const wordDone = letters.length > 0 && got.every((g) => g.by);
+  const diff = tutorial ? '' : difficultyOf(st.rows, par);
   const wordLine = wordDone ? `Word found: ${word[0]}.` : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${got.filter((g) => !g.by).length} letters missed.`;
   const human = st.ghost.user !== 'bot';
   const postId = (() => {
@@ -250,6 +263,14 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
       return undefined;
     }
   })();
+  const postResult = () => {
+    setPosted(true);
+    fetch('/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: shareText }),
+    }).catch(() => undefined);
+  };
   const sayThanks = () => {
     setThanked(true);
     fetch('/api/thanks', {
@@ -385,7 +406,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
       <div className="top">
         <span className="logo">Yester<b>mate</b></span>
         <span className="steps">
-          {tutorial ? (tutorial.total === 1 ? (tutorial.name ?? 'Lesson') : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}`) : `Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
+          {tutorial ? (tutorial.total === 1 ? (tutorial.name ?? 'Lesson') : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}`) : `${diff} · Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
         </span>
       </div>
       <div className="top">
@@ -520,6 +541,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
               {!res.practice && <Chain partners={st.partners} joined />}
               <button onClick={copyResult}>{copied === 'ok' ? 'Result copied' : 'Copy result to share'}</button>
               {copied === 'fail' && <div className="share">{shareText}</div>}
+              {!res.practice && <button disabled={posted} onClick={postResult}>{posted ? 'Posted to the comments' : 'Post my result in the comments'}</button>}
               {(human || postId) && (
                 <>
                   {human && <div className="hint">Tell u/{st.ghost.user} how it went.</div>}

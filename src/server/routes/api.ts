@@ -235,3 +235,18 @@ api.post('/weekly', async (c) => {
   }
   return c.json({ ok: true, steps: res.ticks });
 });
+
+api.post('/share', async (c) => {
+  const user = await who();
+  const { text } = await c.req.json<{ text: string }>();
+  const postId = context.postId;
+  if (!postId) return c.json({ ok: false }, 400);
+  if ((await redis.incrBy(`shared:${today()}:${user}`, 1)) > 1) return c.json({ ok: true, already: true });
+  const lines = String(text ?? '').slice(0, 300).split('\n').join('\n\n');
+  try {
+    await reddit.submitComment({ id: postId, text: `u/${user}\n\n${lines}` });
+    return c.json({ ok: true });
+  } catch {
+    return c.json({ ok: false }, 500);
+  }
+});

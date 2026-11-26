@@ -1,46 +1,64 @@
 # Yestermate
 
-A daily two player puzzle on Reddit. You solve it with a partner who is a recording of the stranger who played before you. When you finish, your run becomes the partner for the next person.
+A daily cooperative puzzle on Reddit. Your partner is a recording of the last stranger who played, and together you spell a secret word. When you win, your run becomes the next stranger's partner.
 
 Built with Devvit Web for Reddit's Game of the Day hackathon.
 
+> Yesterday, a stranger left you a path. Today, you finish what they started.
+
 ## How to play
 
-1. Tap **Play today's level** on the post.
-2. You are the amber dot. Your partner is the teal dot. Both of you must reach your own dashed goal square.
-3. Every move you make is one step for both of you. Use the arrow keys, WASD, or the buttons. The middle button waits one step.
-4. Your partner's moves are fixed. You choose when to move and when to wait.
-5. A door opens only while your partner stands on its matching plate. You can never open your own door, so you must hold the doors for them in the same way.
-6. Silver gates need no plate. They open for two steps, then close for two, on a steady beat. Time your crossing to it.
-7. Each daily level hides a secret word. Its letters lie on the board, and a riddle gives the clue. You and your yestermate both pick up letters just by walking over them, and the word fills in as you go. Amber letters are yours, teal ones came from your partner.
-8. Reach your goal while your partner reaches theirs.
+1. Tap **Play today's level**. New players start with three short lessons.
+2. You are the amber character. Your **yestermate** is the teal one. It replays a stranger's fixed moves.
+3. Move with the arrow keys, WASD or the buttons. Every move is one step for both of you. The middle button waits a step. There is no timer.
+4. A door opens only while your yestermate stands on its matching ring. You can never open your own door, so you hold doors open for them in the same way.
+5. Silver gates need no ring. They open for two steps and close for two, on a steady beat.
+6. Each daily level hides a **secret word**. A riddle gives the clue, and its letters lie on the board. You and your yestermate both pick up letters by walking over them. Amber letters are yours, teal ones came from your partner.
+7. Reach your dashed goal square while your yestermate reaches theirs.
 
-New players start with three short lessons. There is no timer. Each level has a par, and finishing in fewer steps earns up to three stars.
+If your yestermate is stuck at a door, the door and the ring it needs glow. It waits and tries again, so being slow costs steps, not the level.
 
-## The daily loop
+## Reasons to come back
 
-- Every day has a new level and a new chain.
-- Your first win each day adds your run to the chain as the next link.
-- The next player takes the opposite role and plays with your run.
-- Come back the next day to see how many strangers played with your runs.
-- Your streak counts days in a row. The **Best partners** tab ranks the players whose runs helped the most strangers.
-- On a win the game tries to set a flair like "Link #412". This needs flair permission in the subreddit.
+- **Daily level** with a new riddle every day, plus a difficulty label from Easy to Expert.
+- **Yesterday's puzzle**, played with yesterday's last stranger.
+- **Journey**: 90 levels, unlocked in order, with a bot partner and 1 to 3 stars saved to your account.
+- **Weekly Boss**: one hard level for the whole week, with a fewest steps leaderboard.
+- **Bonus puzzles** with a bot after your daily level.
+- **Stars** from par: finish in the fewest steps for three.
+- **Streaks and badges** for streaks, stars, levels cleared, and helping others.
+- **Flair** that shows in comments, like "Link #412 · 7 day streak".
+- **Community goal**: a bar on the post that fills as strangers partner up, plus a community streak.
 
-## Why it always works
+## Made for Reddit
 
-Each new player takes the role of the run before the last one, so a copy of that older run always solves the level. The server also replays every submitted run before it joins the chain. Bad or cheating runs are rejected. The first partner each day is a bot, built by a solver, so nobody plays alone.
+- The post shows the day's **chain** of strangers as linked dots, with your yestermate's name and avatar.
+- **Choose a yestermate by name**: search a username and play a friend's run.
+- **Say thanks** to your partner, and see who played with your runs.
+- **Post my result in the comments** adds your result to the post's thread. **Copy result to share** gives a Wordle style line.
+- A **Best partners** board ranks players by how many strangers used their runs.
 
-## Levels
+## Why every level can be won
 
-There are 36 levels. Level 0 is a one door tutorial. The rest were made by `tools/gen-levels.mjs`. It builds random grids and keeps only the ones a solver can win and that nobody can finish alone.
+Each new player takes the role of the run before the last one, so copying that older run always works. The server replays every submitted run before it joins the chain, so bad or cheating runs are rejected. The first yestermate each day is a bot built by a solver, so nobody plays alone.
+
+## Content
+
+- 36 daily levels, each with its own secret word and riddle.
+- 90 Journey levels, plus a new Weekly Boss every 7 days.
+- All levels were made by a generator and checked by a solver. Tests confirm each one can be won in both roles and cannot be finished without help.
+
+## Reliability
+
+Shared counters use atomic operations, so players who finish at the same moment cannot overwrite each other. One counted win per player per day, even if they submit twice.
 
 ## Project layout
 
-- `src/shared/sim.ts` the game rules, the checker and the solver
-- `src/shared/levels.ts` the level list
-- `src/server/routes/api.ts` today's state, run checking, streaks and the board
-- `src/client/splash.tsx` the feed card
-- `src/client/game.tsx` the game screen
+- `src/shared/sim.ts` the rules, the run checker, the solver, par, and letter placement
+- `src/shared/levels.ts`, `journey.ts`, `words.ts` the daily levels, the Journey levels, and the riddles
+- `src/server/routes/api.ts` the chain, streaks, stars, boards, weekly boss and comments
+- `src/client/game.tsx` the game screen, `splash.tsx` the feed card
+- `tools/gen-levels.mjs` the level generator, `tools/preview.mjs` a local preview with sample data
 
 ## Run it
 
@@ -50,5 +68,3 @@ npm run dev
 npm run test:types
 npm run test:unit
 ```
-
-The unit tests check that every level can be won in both roles and that no level can be finished without help.
