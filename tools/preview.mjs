@@ -63,6 +63,8 @@ createServer((req, res) => {
       tutorialDone,
       recent: ['mara_k', 'tolu_b'],
       thanks: 2,
+      community: { wins: 24, links: 17, streak: 3, goal: 25 },
+      avatar: null,
       stats: { dailyStars: 12, dailyThree: 3, journey },
       partners: [...links.values()].filter((l) => l.id.startsWith(`${day}-`)).map((l) => ({ ...l, at: l.at ?? 0 })),
     });

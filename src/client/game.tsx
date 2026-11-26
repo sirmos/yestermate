@@ -1,5 +1,5 @@
 import './index.css';
-import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { context, navigateTo } from '@devvit/web/client';
 import { Chain, chainCss } from './chain';
@@ -22,6 +22,8 @@ type St = {
   partners: Partner[];
   thanks: number;
   stats: Stats;
+  community: { wins: number; links: number; streak: number; goal: number };
+  avatar: string | null;
   yesterday: { rows: string[]; role: Role; ghost: { id: string; moves: string; user: string; at?: number | undefined } } | null;
   recent: string[];
   day: number;
@@ -75,6 +77,16 @@ button:disabled{opacity:.55}
 .lv{padding:10px 0;font-weight:700}
 .lv small{display:block;font-size:10px;color:#f2b84b;font-weight:400}
 .lv.done{background:#34405a}
+.card{position:relative;overflow:hidden}
+.stars{font-size:30px;color:#f2b84b;display:flex;gap:4px}
+.st.on{animation:starpop .55s ease backwards}
+@keyframes starpop{0%{transform:scale(0) rotate(-40deg);opacity:0}70%{transform:scale(1.45)}}
+.conf{position:absolute;left:50%;top:50px;width:0;height:0;pointer-events:none}
+.conf i{position:absolute;width:6px;height:11px;border-radius:2px;animation:burst 1s ease-out forwards}
+@keyframes burst{from{opacity:1;transform:rotate(var(--a)) translateY(0)}to{opacity:0;transform:rotate(var(--a)) translateY(-110px)}}
+.find{background:#171a22;border:1px solid #2d3345;border-radius:10px;padding:10px;color:#ece8df;font:inherit}
+.who{display:flex;justify-content:space-between;padding:12px 14px;text-align:left}
+.who small{opacity:.7}
 .rowb{display:flex;justify-content:space-between;font-size:15px}
 @keyframes pulse{50%{opacity:.45}}
 @keyframes hop{50%{transform:translateY(-22%)}}
@@ -119,6 +131,52 @@ const ago = (t?: number) => {
   return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} hours ago` : `${Math.round(m / 1440)} days ago`;
 };
 
+function Stars({ n }: { n: number }) {
+  return (
+    <div className="stars">
+      {[0, 1, 2].map((i) => (
+        <span key={i} className={i < n ? 'st on' : 'st'} style={{ animationDelay: `${i * 0.25}s` }}>
+          {i < n ? '★' : '☆'}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function Confetti() {
+  const colors = ['#f2b84b', '#4fc3b5', '#e8735a', '#8b7be8'];
+  return (
+    <div className="conf">
+      {Array.from({ length: 18 }, (_, i) => (
+        <i key={i} style={{ '--a': `${i * 20}deg`, background: colors[i % 4] } as CSSProperties} />
+      ))}
+    </div>
+  );
+}
+
+function PartnerList({ list, onPick, onBack }: { list: Partner[]; onPick: (id: string) => void; onBack: () => void }) {
+  const [q, setQ] = useState('');
+  const key = q.trim().replace(/^u\//i, '').toLowerCase();
+  const shown = [...list].reverse().filter((p) => p.user.toLowerCase().includes(key));
+  return (
+    <div className="w">
+      <div className="top">
+        <span className="logo">Pick a yeste<b>rmate</b></span>
+        <button className="tab" onClick={onBack}>Back</button>
+      </div>
+      <input className="find" placeholder="Search a username, like a friend" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="hint">Each run is a stranger's recording from today. Pick one to play with.</div>
+      {shown.length === 0 && <div className="hint">No runs match yet. Ask your friend to win today's level first.</div>}
+      {shown.map((p) => (
+        <button key={p.id} className="who" onClick={() => onPick(p.id)}>
+          <b>{p.user === 'bot' ? 'Bot' : `u/${p.user}`}</b>
+          <small>{p.moves.length} steps{p.at ? `, ${ago(p.at)}` : ''}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Tabs({ tab, setTab, onJourney }: { tab: string; setTab: (t: 'play' | 'board') => void; onJourney?: (() => void) | undefined }) {
   return (
     <span>
@@ -132,7 +190,7 @@ function Tabs({ tab, setTab, onJourney }: { tab: string; setTab: (t: 'play' | 'b
 type Partner = { id: string; role: Role; moves: string; user: string; at: number };
 type Lesson = { n: number; total: number; tip: string; onNext: () => void; name?: string | undefined; endLabel?: string | undefined; onWin?: ((moves: string) => void) | undefined; onBack?: (() => void) | undefined };
 
-function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void; onYesterday?: () => void; onJourney?: () => void }) {
+function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoose }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void; onYesterday?: () => void; onJourney?: () => void; onChoose?: () => void }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
@@ -284,6 +342,8 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney }: { st
           ))}
           <div className="hint">Strangers who played with your runs: {st.uses}</div>
           <Badges m={metricsOf(st)} />
+          <div className="hint">Community: {st.community.links} partnerships so far. Next goal: {st.community.goal}. Community streak: {st.community.streak} days.</div>
+          {onChoose && <button onClick={onChoose}>Choose a yestermate by name</button>}
         </div>
       </div>
     );
@@ -382,10 +442,11 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney }: { st
 
       {finished && (
         <div className="card">
+          <Confetti />
           {tutorial ? (
             <>
               <div className="big">Nice!</div>
-              <div style={{ fontSize: 26, color: '#f2b84b' }}>{'★'.repeat(nStars)}{'☆'.repeat(3 - nStars)}</div>
+              <Stars n={nStars} />
               <div className="hint">{tutorial.total === 1 ? 'Done' : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total} done`} in {moves.length} steps. Par is {par}.</div>
               <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? (tutorial.endLabel ?? "Start today's level") : `Next ${(tutorial.name ?? 'lesson').toLowerCase()}`}</button>
               {tutorial.onBack && <button onClick={tutorial.onBack}>Level map</button>}
@@ -408,7 +469,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney }: { st
           ) : (
             <>
               <div className="big">Link #{res.link ?? res.humans}</div>
-              <div style={{ fontSize: 26, color: '#f2b84b' }}>{'★'.repeat(nStars)}{'☆'.repeat(3 - nStars)}</div>
+              <Stars n={nStars} />
               <div className="hint">{moves.length} steps. Par is {par}.</div>
               <div>
                 {res.practice
@@ -441,6 +502,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney }: { st
                 </>
               )}
               {onPartner ? <button onClick={onPartner}>Play with another stranger</button> : <button onClick={() => setMoves('')}>Play again for practice</button>}
+              {onChoose && <button onClick={onChoose}>Choose a yestermate by name</button>}
               {onYesterday && <button onClick={onYesterday}>Yesterday's puzzle, with yesterday's mate</button>}
               {onBonus && <button onClick={onBonus}>Bonus puzzles with a bot</button>}
             </>
@@ -465,7 +527,7 @@ function Tutorial({ lessons, onDone, name, endLabel }: { lessons: Plan[]; onDone
   const st = useMemo<St>(() => {
     const sol = solve(parse(t.rows))!;
     const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
-    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0, yesterday: null, stats: { dailyStars: 0, dailyThree: 0, journey: [] } };
+    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0, yesterday: null, stats: { dailyStars: 0, dailyThree: 0, journey: [] }, community: { wins: 0, links: 0, streak: 0, goal: 10 }, avatar: null };
   }, [t]);
   const next = () => (i + 1 < lessons.length ? setI(i + 1) : onDone());
   return <Game key={i} st={st} tutorial={{ n: i + 1, total: lessons.length, tip: t.tip, onNext: next, name, endLabel }} />;
@@ -527,6 +589,7 @@ function App() {
   const [yday, setYday] = useState(false);
   const [jmap, setJmap] = useState(false);
   const [jlevel, setJlevel] = useState<number | null>(null);
+  const [plist, setPlist] = useState(false);
   const [pick, setPick] = useState(-1);
   useEffect(() => {
     fetch('/api/state')
@@ -558,6 +621,18 @@ function App() {
       setSt({ ...st, tutorialDone: true });
     };
     return <Tutorial lessons={TUTORIAL} onDone={done} />;
+  }
+  if (plist) {
+    return (
+      <PartnerList
+        list={st.partners}
+        onBack={() => setPlist(false)}
+        onPick={(id) => {
+          setPick(st.partners.findIndex((p) => p.id === id));
+          setPlist(false);
+        }}
+      />
+    );
   }
   if (jlevel !== null) {
     return (
@@ -597,7 +672,7 @@ function App() {
     ? { ...st, role: chosen.role === 'A' ? 'B' : 'A', ghost: { id: chosen.id, moves: chosen.moves, user: chosen.user, at: chosen.at } }
     : st;
   const nextPartner = () => setPick((p) => ((p < 0 ? list.length - 1 : p) + 1) % list.length);
-  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} onJourney={() => setJmap(true)} {...(st.yesterday ? { onYesterday: () => setYday(true) } : {})} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
+  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} onJourney={() => setJmap(true)} {...(st.partners.length > 1 ? { onChoose: () => setPlist(true) } : {})} {...(st.yesterday ? { onYesterday: () => setYday(true) } : {})} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
 }
 
 const style = document.createElement('style');

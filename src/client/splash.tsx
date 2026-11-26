@@ -11,6 +11,8 @@ type Info = {
   rows: string[];
   role: 'A' | 'B';
   humans: number;
+  avatar: string | null;
+  community: { wins: number; links: number; streak: number; goal: number };
   partners: { id: string; user: string }[];
   played: boolean;
   streak: number;
@@ -33,6 +35,11 @@ h1 b{color:#f2b84b}
 .m{width:24px;height:24px;border-radius:6px;background:#272c3b;position:relative}
 .m.w{background:#0d0f14}
 .mk{position:absolute;inset:4px}
+.who2{display:flex;align-items:center;gap:8px;font-size:13px;opacity:.9}
+.who2 img{width:26px;height:26px;border-radius:50%;background:#272c3b}
+.comm{font-size:12px;opacity:.85;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar2{width:200px;height:7px;border-radius:99px;background:#272c3b;overflow:hidden}
+.bar2 i{display:block;height:100%;background:#f2b84b}
 .go{background:#f2b84b;color:#14161c;border:0;border-radius:999px;padding:12px 28px;font-size:16px;font-weight:700;cursor:pointer}
 `;
 
@@ -96,15 +103,27 @@ function Splash() {
       <h1>Yester<b>mate</b></h1>
       <div className="sub">
         {info
-          ? `Today your yestermate is ${partner}. Their moves are fixed. Time yours to fit.`
+          ? 'Yesterday, a stranger left you a path. Today, you finish what they started.'
           : 'Solve a small puzzle with a stranger from yesterday.'}
       </div>
+      {info && (
+        <div className="who2">
+          {info.avatar && <img src={info.avatar} alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+          <span>Your yestermate today: {partner}</span>
+        </div>
+      )}
       {info && <Chain partners={info.partners} />}
       {info && (
         <div className="row">
           <span><b>{info.humans}</b>in today's chain</span>
           <span><b>{info.streak}</b>day streak</span>
           <span><b>{info.uses}</b>used your runs</span>
+        </div>
+      )}
+      {info && (
+        <div className="comm">
+          <span>Community: {info.community.links} of {info.community.goal} partnerships</span>
+          <div className="bar2"><i style={{ width: `${Math.min(100, (info.community.links / Math.max(1, info.community.goal)) * 100)}%` }} /></div>
         </div>
       )}
       <button className="go" onClick={(e) => requestExpandedMode(e.nativeEvent, 'game')}>
