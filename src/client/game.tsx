@@ -7,7 +7,8 @@ import { themeCss } from './theme';
 import { Badges, badgeCss, metricsOf, type Metrics, type Stats } from './badges';
 import { JOURNEY } from '../shared/journey';
 import { setMusic as setMusicEngine, setMusicVol } from './music';
-import { MAX_TICKS, minSteps, parse, replay, solve, type Role } from '../shared/sim';
+import { MAX_TICKS, minSteps, parse, placeLetters, replay, solve, trail, type Role } from '../shared/sim';
+import { WORDS } from '../shared/words';
 import { LEVELS } from '../shared/levels';
 
 type St = {
@@ -89,6 +90,12 @@ button:disabled{opacity:.55}
 .find{background:#171a22;border:1px solid #2d3345;border-radius:10px;padding:10px;color:#ece8df;font:inherit}
 .who{display:flex;justify-content:space-between;padding:12px 14px;text-align:left}
 .who small{opacity:.7}
+.wordbox{display:flex;flex-direction:column;gap:6px;align-items:center}
+.wordbar{display:flex;gap:6px;justify-content:center}
+.slot{width:36px;height:42px;border-radius:9px;background:#1b1f2b;border:2px dashed #3a4156;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:21px;color:#5b6278}
+.slot.me{background:#f2b84b;color:#14161c;border:2px solid #f2b84b;animation:starpop .45s ease}
+.slot.pt{background:#4fc3b5;color:#14161c;border:2px solid #4fc3b5;animation:starpop .45s ease}
+.ltr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;color:#f6e7c8;text-shadow:0 0 12px rgba(242,184,75,.9);animation:pulse 1.6s infinite;pointer-events:none}
 .rowb{display:flex;justify-content:space-between;font-size:15px}
 @keyframes pulse{50%{opacity:.45}}
 @keyframes hop{50%{transform:translateY(-22%)}}
@@ -223,6 +230,16 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished]);
   const par = useMemo(() => minSteps(level, st.role, st.ghost.moves), [level, st]);
+  const word = WORDS[st.day % WORDS.length]!;
+  const letters = useMemo(() => (tutorial ? [] : placeLetters(level, word[0], st.day)), [level, word, st.day, tutorial]);
+  const tr = useMemo(() => (tutorial ? { a: [], b: [] } : trail(level, st.role, moves, st.ghost.moves)), [level, moves, st, tutorial]);
+  const mineTrail = st.role === 'A' ? tr.a : tr.b;
+  const theirTrail = st.role === 'A' ? tr.b : tr.a;
+  const hit = (path: { x: number; y: number }[], q: { x: number; y: number }) => path.some((p) => p.x === q.x && p.y === q.y);
+  const got = letters.map((q) => ({ ...q, by: hit(mineTrail, q) ? 'me' : hit(theirTrail, q) ? 'pt' : '' }));
+  const slotView = [...word[0]].map((c, i) => ({ c, by: got.find((g) => g.slot === i)?.by ?? '' }));
+  const wordShown = slotView.map((v) => (v.by ? v.c : '_')).join('');
+  const wordDone = letters.length > 0 && got.every((g) => g.by);
   const human = st.ghost.user !== 'bot';
   const postId = (() => {
     try {
@@ -240,7 +257,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
     }).catch(() => undefined);
   };
   const nStars = par ? (moves.length <= par ? 3 : moves.length <= par + 2 ? 2 : 1) : 1;
-  const shareText = `Yestermate #${st.day + 1} ${'★'.repeat(nStars)}${'☆'.repeat(3 - nStars)}\n${moves.length} steps, par ${par ?? '?'}${human ? `, with u/${st.ghost.user}` : ''}`;
+  const shareText = `Yestermate #${st.day + 1} ${'★'.repeat(nStars)}${'☆'.repeat(3 - nStars)}\n${moves.length} steps, par ${par ?? '?'}${human ? `, with u/${st.ghost.user}` : ''}${tutorial ? '' : `\nWord ${wordShown}`}`;
   const copyResult = () => {
     try {
       navigator.clipboard
@@ -393,6 +410,16 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
         </div>
       )}
 
+      {!tutorial && (
+        <div className="wordbox">
+          <div className="wordbar">
+            {slotView.map((v, i) => (
+              <span key={i} className={v.by ? `slot ${v.by}` : 'slot'}>{v.by ? v.c : '_'}</span>
+            ))}
+          </div>
+          <div className="hint">Riddle: {word[1]}</div>
+        </div>
+      )}
       <div className={finished ? 'board won' : 'board'} style={{ aspectRatio: `${cols} / ${rows}` }}>
         <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
           {level.cells.slice(1, -1).flatMap((row, y) =>
@@ -404,11 +431,13 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
                 const isPlate = 'xyz'.includes(ch);
                 const isDoor = 'XYZ'.includes(ch);
                 const isGate = ch === 'T';
+                const Lt = got.find((g) => g.x === x + 1 && g.y === y + 1);
                 const ask = !!waitTarget && (same(waitTarget, x + 1, y + 1) || ('XYZ'.includes(waitCell) && ch === waitCell.toLowerCase()));
                 const pressed = isPlate && (same(me, x + 1, y + 1) || same(pt, x + 1, y + 1));
                 return (
                   <div key={`${x}-${y}`} className={(ch === '#' ? 'c wall' : 'c') + (ask ? ' ask' : '')}>
                     {isPlate && <div className="plate" style={{ borderColor: k, background: pressed ? k : 'transparent' }} />}
+                    {Lt && !Lt.by && <div className="ltr">{Lt.ch}</div>}
                     {isGate && <div className="door gate" style={{ opacity: sim.t % 4 < 2 ? 0.15 : 1 }} />}
                     {isDoor && <div className="door" style={{ background: k, opacity: doorOpacity(ch) }} />}
                     {same(myGoal, x + 1, y + 1) && <div className="goal" style={{ borderColor: ME }} />}
@@ -484,6 +513,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
               {st.thanks > 0 && <div className="hint">Thank-yous from partners: {st.thanks}</div>}
               {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
               <div className="hint">Your run is now someone's yestermate. Come back tomorrow to see who used it.</div>
+              <div className="hint">{wordDone ? `Word found: ${word[0]}. You and your yestermate spelled it together.` : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${got.filter((g) => !g.by).length} letters missed.`}</div>
               {!res.practice && <Chain partners={st.partners} joined />}
               <button onClick={copyResult}>{copied === 'ok' ? 'Result copied' : 'Copy result to share'}</button>
               {copied === 'fail' && <div className="share">{shareText}</div>}

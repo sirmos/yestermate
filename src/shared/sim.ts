@@ -170,3 +170,84 @@ export function solve(l: Level): { a: string; b: string } | null {
   }
   return null;
 }
+
+// Positions of both characters after each tick (used to see which letters were collected).
+export function trail(l: Level, role: Role, moves: string, ghost: string) {
+  const a: P[] = [];
+  const b: P[] = [];
+  for (let t = 1; t <= moves.length && t <= MAX_TICKS; t++) {
+    const r = replay(l, role, moves.slice(0, t), ghost);
+    a.push(r.s.a);
+    b.push(r.s.b);
+  }
+  return { a, b };
+}
+
+export type Letter = { x: number; y: number; ch: string; slot: number; d: number };
+
+// Puts the letters of a secret word on the board. Half lie on the solver's route,
+// so a partner following it picks them up. The rest sit one step off the route.
+export function placeLetters(l: Level, word: string, seed: number): Letter[] {
+  const key = (p: P) => `${p.x},${p.y}`;
+  const onPath = new Set<string>();
+  const sol = solve(l);
+  if (sol) {
+    let s = start(l);
+    for (let t = 0; t < sol.a.length; t++) {
+      s = step(l, s, Number(sol.a[t]), Number(sol.b[t]));
+      onPath.add(key(s.a));
+      onPath.add(key(s.b));
+    }
+  }
+  const reserved = new Set([key(l.a), key(l.b), key(l.ga), key(l.gb)]);
+  const all: P[] = [];
+  for (let y = 0; y < l.cells.length; y++) {
+    for (let x = 0; x < (l.cells[0]?.length ?? 0); x++) {
+      const p = { x, y };
+      if (at(l, p) === '.' && !reserved.has(key(p))) all.push(p);
+    }
+  }
+  let r = seed * 7919 + 13;
+  const shuffle = <T,>(list: T[]): T[] => {
+    const arr = [...list];
+    for (let i = arr.length - 1; i > 0; i--) {
+      r = (r * 1103515245 + 12345) % 2147483648;
+      const j = r % (i + 1);
+      [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+    }
+    return arr;
+  };
+  // How many steps each cell is from the route (walls block, doors and gates do not).
+  const dist = new Map<string, number>();
+  let frontier: P[] = [...onPath].map((k) => {
+    const [x, y] = k.split(',').map(Number);
+    return { x: x!, y: y! };
+  });
+  frontier.forEach((p) => dist.set(key(p), 0));
+  for (let d = 1; d <= 3; d++) {
+    const next: P[] = [];
+    for (const p of frontier) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const q = { x: p.x + dx!, y: p.y + dy! };
+        if (at(l, q) === '#' || dist.has(key(q))) continue;
+        dist.set(key(q), d);
+        next.push(q);
+      }
+    }
+    frontier = next;
+  }
+  const ring = (d: number) => shuffle(all.filter((p) => dist.get(key(p)) === d));
+  const need = word.length;
+  const r0 = ring(0);
+  const chosen: P[] = [];
+  const used = new Set<string>();
+  const add = (p: P) => {
+    if (chosen.length < need && !used.has(key(p))) {
+      chosen.push(p);
+      used.add(key(p));
+    }
+  };
+  [...r0.slice(0, Math.ceil(need / 2)), ...ring(1), ...r0, ...ring(2), ...ring(3), ...shuffle(all)].forEach(add);
+  const slots = shuffle(Array.from({ length: chosen.length }, (_, i) => i));
+  return chosen.map((p, i) => ({ x: p.x, y: p.y, slot: slots[i]!, ch: word[slots[i]!]!, d: dist.get(key(p)) ?? 9 }));
+}

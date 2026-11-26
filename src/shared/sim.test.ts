@@ -3,9 +3,10 @@
 // @ts-nocheck
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_TICKS, minSteps, parse, solve, start, step, validate, type Level } from './sim.ts';
+import { MAX_TICKS, minSteps, parse, placeLetters, solve, start, step, trail, validate, type Level } from './sim.ts';
 import { LEVELS } from './levels.ts';
 import { JOURNEY } from './journey.ts';
+import { WORDS } from './words.ts';
 
 // Can one player finish while the partner just waits?
 function alone(l: Level, role: 'A' | 'B'): boolean {
@@ -78,4 +79,20 @@ test('every journey level can be won in both roles, and none repeat', () => {
     assert.ok(validate(l, 'A', s.a, s.b).won, `journey ${i}: role A fails`);
     assert.ok(validate(l, 'B', s.b, s.a).won, `journey ${i}: role B fails`);
   });
+});
+
+test('every daily word fits on its level and can be partly collected on the solver route', () => {
+  for (let day = 0; day < LEVELS.length; day++) {
+    const l = parse(LEVELS[day % LEVELS.length]!);
+    const [word] = WORDS[day % WORDS.length]!;
+    const letters = placeLetters(l, word, day);
+    assert.equal(letters.length, word.length, `day ${day}: wrong letter count`);
+    assert.equal(new Set(letters.map((x) => `${x.x},${x.y}`)).size, word.length, `day ${day}: letters share a cell`);
+    assert.equal(letters.map((x) => x.ch).sort().join(''), [...word].sort().join(''), `day ${day}: letters do not spell the word`);
+    const sol = solve(l)!;
+    const t = trail(l, 'A', sol.a, sol.b);
+    const got = letters.filter((x) => [...t.a, ...t.b].some((p) => p.x === x.x && p.y === x.y)).length;
+    assert.ok(got >= 1, `day ${day}: no letter on the route`);
+    assert.ok(letters.every((q) => q.d <= 3), `day ${day}: a letter is too far from the route`);
+  }
 });
