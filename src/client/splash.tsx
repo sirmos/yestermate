@@ -5,6 +5,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { parse } from '../shared/sim';
 import { Chain, chainCss } from './chain';
+import { themeCss } from './theme';
 
 type Info = {
   day: number;
@@ -134,7 +135,7 @@ function Splash() {
 }
 
 const style = document.createElement('style');
-style.textContent = css + chainCss;
+style.textContent = css + chainCss + themeCss;
 document.head.appendChild(style);
 
 createRoot(document.getElementById('root')!).render(

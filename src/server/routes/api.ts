@@ -10,6 +10,7 @@ const DAY0 = Date.UTC(2026, 10, 11);
 const today = () => Math.floor((Date.now() - DAY0) / 86400000);
 const levelForDay = (d: number) => parse(LEVELS[d % LEVELS.length]!);
 const starsFor = (steps: number, par: number | null) => (par ? (steps <= par ? 3 : steps <= par + 2 ? 2 : 1) : 1);
+const weeklyIndex = (week: number) => Math.max(0, JOURNEY.length - 30) + (week % Math.min(30, JOURNEY.length));
 const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500];
 
 type Link = { id: string; role: Role; moves: string; user: string; at?: number };
@@ -74,6 +75,13 @@ api.get('/state', async (c) => {
     }
   }
 
+  const week = Math.floor(day / 7);
+  const wbest = await redis.get(`weeklybest:${week}:${user}`);
+  const weekly = {
+    level: weeklyIndex(week),
+    best: wbest ? Number(wbest) : null,
+    top: await redis.zRange(`weekly:${week}`, 0, 4, { by: 'rank' }),
+  };
   const links = await num('community:links');
   const lastActive = await num('community:last');
   const community = {
@@ -101,6 +109,7 @@ api.get('/state', async (c) => {
     stats: await getStats(user),
     community,
     avatar,
+    weekly,
   });
 });
 
@@ -205,4 +214,24 @@ api.post('/journey', async (c) => {
   journey[body.level] = Math.max(journey[body.level] ?? 0, stars);
   await redis.set(`stats:${user}`, JSON.stringify({ ...stats, journey }));
   return c.json({ ok: true, stars, journey });
+});
+
+api.post('/weekly', async (c) => {
+  const user = await who();
+  const week = Math.floor(today() / 7);
+  const body = await c.req.json<{ moves: string }>();
+  const rows = JOURNEY[weeklyIndex(week)];
+  if (!rows) return c.json({ ok: false }, 400);
+  const l = parse(rows);
+  const sol = solve(l);
+  if (!sol) return c.json({ ok: false }, 400);
+  const res = validate(l, 'A', String(body.moves ?? ''), sol.b);
+  if (!res.won) return c.json({ ok: false }, 400);
+  const key = `weeklybest:${week}:${user}`;
+  const prev = await redis.get(key);
+  if (!prev || res.ticks < Number(prev)) {
+    await redis.set(key, String(res.ticks));
+    await redis.zAdd(`weekly:${week}`, { member: user, score: res.ticks });
+  }
+  return c.json({ ok: true, steps: res.ticks });
 });
