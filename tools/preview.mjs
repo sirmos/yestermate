@@ -17,6 +17,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 let day = 0;
 let streak = 3;
 let tutorialDone = false;
+let journey = [3, 2, 3];
 let linkCount = 411;
 let chains = new Map();
 let links = new Map();
@@ -62,6 +63,7 @@ createServer((req, res) => {
       tutorialDone,
       recent: ['mara_k', 'tolu_b'],
       thanks: 2,
+      stats: { dailyStars: 12, dailyThree: 3, journey },
       partners: [...links.values()].filter((l) => l.id.startsWith(`${day}-`)).map((l) => ({ ...l, at: l.at ?? 0 })),
     });
   }
@@ -91,6 +93,17 @@ createServer((req, res) => {
     return;
   }
 
+  if (path === '/api/journey' && req.method === 'POST') {
+    let raw = '';
+    req.on('data', (d) => (raw += d));
+    req.on('end', () => {
+      const { level } = JSON.parse(raw || '{}');
+      for (let i = 0; i < level; i++) journey[i] = journey[i] ?? 1;
+      journey[level] = Math.max(journey[level] ?? 0, 3);
+      send(res, 200, { ok: true, stars: 3, journey });
+    });
+    return;
+  }
   if (path === '/api/thanks') return send(res, 200, { ok: true });
   if (path === '/api/tutorial-done') {
     tutorialDone = true;

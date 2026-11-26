@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { context, reddit, redis } from '@devvit/web/server';
-import { parse, replay, solve, validate, type Role } from '../../shared/sim';
+import { minSteps, parse, replay, solve, validate, type Role } from '../../shared/sim';
+import { JOURNEY } from '../../shared/journey';
 import { LEVELS } from '../../shared/levels';
 
 const levelForDay = (d: number) => parse(LEVELS[d % LEVELS.length]!);
@@ -21,6 +22,10 @@ async function getJson<T>(key: string): Promise<T | null> {
 const who = async () => (await reddit.getCurrentUsername()) ?? 'anon';
 
 // First visit of the day builds the bot pair. Humans play against the bot B run.
+type Stats = { dailyStars: number; dailyThree: number; journey: number[] };
+const getStats = async (user: string): Promise<Stats> =>
+  (await getJson<Stats>(`stats:${user}`)) ?? { dailyStars: 0, dailyThree: 0, journey: [] };
+
 async function chainFor(day: number): Promise<Chain> {
   const found = await getJson<Chain>(`chain:${day}`);
   if (found) return found;
@@ -56,6 +61,7 @@ api.get('/state', async (c) => {
         ghost: { id: yChain.head.id, moves: yChain.head.moves, user: yChain.head.user, at: yChain.head.at ?? 0 },
       }
     : null;
+  const stats = await getStats(user);
   const thanks = Number((await redis.get(`thanks:${user}`)) ?? 0);
   const tutorialDone = !!(await redis.get(`tutorial:${user}`));
   const recent = (await getJson<string[]>(`recent:${user}`)) ?? [];
@@ -74,6 +80,7 @@ api.get('/state', async (c) => {
     partners,
     thanks,
     yesterday,
+    stats,
   });
 });
 
@@ -114,6 +121,13 @@ api.post('/submit', async (c) => {
   const count = streakNow && streakNow.last === day - 1 ? streakNow.count + 1 : 1;
   await redis.set(`streak:${user}`, JSON.stringify({ last: day, count }));
 
+  const dpar = minSteps(levelForDay(day), role, ghost.moves);
+  const dstars = dpar ? (result.ticks <= dpar ? 3 : result.ticks <= dpar + 2 ? 2 : 1) : 1;
+  const dstats = await getStats(user);
+  await redis.set(
+    `stats:${user}`,
+    JSON.stringify({ ...dstats, dailyStars: dstats.dailyStars + dstars, dailyThree: dstats.dailyThree + (dstars === 3 ? 1 : 0) })
+  );
   if (ghost.user !== 'bot') {
     await redis.incrBy(`uses:${ghost.user}`, 1);
     await redis.zIncrBy('board:uses', ghost.user, 1);
@@ -122,7 +136,7 @@ api.post('/submit', async (c) => {
     await redis.set(`recent:${ghost.user}`, JSON.stringify(next));
   }
   const n = await redis.incrBy('links:total', 1);
-  const flair = `Link #${n}`;
+  const flair = `Link #${n}${count >= 3 ? ` · ${count} day streak` : ''}`;
   try {
     await reddit.setUserFlair({ subredditName: context.subredditName, username: user, text: flair });
   } catch {
@@ -141,4 +155,27 @@ api.post('/thanks', async (c) => {
   await redis.set(once, '1');
   await redis.incrBy(`thanks:${ghost.user}`, 1);
   return c.json({ ok: true });
+});
+
+api.post('/journey', async (c) => {
+  const user = await who();
+  const body = await c.req.json<{ level: number; moves: string }>();
+  const rows = JOURNEY[body.level];
+  if (!rows) return c.json({ ok: false }, 400);
+  const stats = await getStats(user);
+  if (body.level > 0 && !(stats.journey[body.level - 1] ?? 0)) return c.json({ ok: false }, 400);
+  const l = parse(rows);
+  const sol = solve(l);
+  if (!sol) return c.json({ ok: false }, 400);
+  const role: Role = body.level % 2 ? 'B' : 'A';
+  const ghost = role === 'A' ? sol.b : sol.a;
+  const res = validate(l, role, String(body.moves ?? ''), ghost);
+  if (!res.won) return c.json({ ok: false }, 400);
+  const par = minSteps(l, role, ghost) ?? res.ticks;
+  const stars = res.ticks <= par ? 3 : res.ticks <= par + 2 ? 2 : 1;
+  const journey = [...stats.journey];
+  for (let i = 0; i < body.level; i++) journey[i] = journey[i] ?? 0;
+  journey[body.level] = Math.max(journey[body.level] ?? 0, stars);
+  await redis.set(`stats:${user}`, JSON.stringify({ ...stats, journey }));
+  return c.json({ ok: true, stars, journey });
 });

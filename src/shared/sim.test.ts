@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_TICKS, minSteps, parse, solve, start, step, validate, type Level } from './sim.ts';
 import { LEVELS } from './levels.ts';
+import { JOURNEY } from './journey.ts';
 
 // Can one player finish while the partner just waits?
 function alone(l: Level, role: 'A' | 'B'): boolean {
@@ -66,4 +67,15 @@ test('par matches the solver when the partner follows the solution', () => {
 test('some levels use silver gates', () => {
   const gated = LEVELS.filter((rows) => rows.join('').includes('T')).length;
   assert.ok(gated >= 8, `only ${gated} gated levels`);
+});
+
+test('every journey level can be won in both roles, and none repeat', () => {
+  assert.equal(new Set(JOURNEY.map((r) => r.join('|'))).size, JOURNEY.length);
+  JOURNEY.forEach((rows, i) => {
+    const l = parse(rows);
+    const s = solve(l);
+    assert.ok(s, `journey ${i} has no solution`);
+    assert.ok(validate(l, 'A', s.a, s.b).won, `journey ${i}: role A fails`);
+    assert.ok(validate(l, 'B', s.b, s.a).won, `journey ${i}: role B fails`);
+  });
 });

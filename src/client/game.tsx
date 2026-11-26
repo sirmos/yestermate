@@ -3,6 +3,8 @@ import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { context, navigateTo } from '@devvit/web/client';
 import { Chain, chainCss } from './chain';
+import { Badges, badgeCss, metricsOf, type Metrics, type Stats } from './badges';
+import { JOURNEY } from '../shared/journey';
 import { setMusic as setMusicEngine, setMusicVol } from './music';
 import { MAX_TICKS, minSteps, parse, replay, solve, type Role } from '../shared/sim';
 import { LEVELS } from '../shared/levels';
@@ -19,6 +21,7 @@ type St = {
   tutorialDone: boolean;
   partners: Partner[];
   thanks: number;
+  stats: Stats;
   yesterday: { rows: string[]; role: Role; ghost: { id: string; moves: string; user: string; at?: number | undefined } } | null;
   recent: string[];
   day: number;
@@ -68,6 +71,10 @@ button:active{transform:translateY(2px);box-shadow:none}
 .two{display:flex;gap:8px}
 .two button{flex:1;font-size:15px}
 button:disabled{opacity:.55}
+.map{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.lv{padding:10px 0;font-weight:700}
+.lv small{display:block;font-size:10px;color:#f2b84b;font-weight:400}
+.lv.done{background:#34405a}
 .rowb{display:flex;justify-content:space-between;font-size:15px}
 @keyframes pulse{50%{opacity:.45}}
 @keyframes hop{50%{transform:translateY(-22%)}}
@@ -112,19 +119,20 @@ const ago = (t?: number) => {
   return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} hours ago` : `${Math.round(m / 1440)} days ago`;
 };
 
-function Tabs({ tab, setTab }: { tab: string; setTab: (t: 'play' | 'board') => void }) {
+function Tabs({ tab, setTab, onJourney }: { tab: string; setTab: (t: 'play' | 'board') => void; onJourney?: (() => void) | undefined }) {
   return (
     <span>
       <button className={tab === 'play' ? 'tab on' : 'tab'} onClick={() => setTab('play')}>Play</button>
-      <button className={tab === 'board' ? 'tab on' : 'tab'} onClick={() => setTab('board')}>Best partners</button>
+      <button className={tab === 'board' ? 'tab on' : 'tab'} onClick={() => setTab('board')}>Board</button>
+      {onJourney && <button className="tab" onClick={onJourney}>Journey</button>}
     </span>
   );
 }
 
 type Partner = { id: string; role: Role; moves: string; user: string; at: number };
-type Lesson = { n: number; total: number; tip: string; onNext: () => void; name?: string | undefined; endLabel?: string | undefined };
+type Lesson = { n: number; total: number; tip: string; onNext: () => void; name?: string | undefined; endLabel?: string | undefined; onWin?: ((moves: string) => void) | undefined; onBack?: (() => void) | undefined };
 
-function Game({ st, tutorial, onBonus, onPartner, onYesterday }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void; onYesterday?: () => void }) {
+function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void; onYesterday?: () => void; onJourney?: () => void }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
@@ -149,6 +157,11 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday }: { st: St; tutor
   const sim = rep.s;
 
   const finished = sim.da && sim.db;
+  useEffect(() => {
+    if (finished && tutorial?.onWin) tutorial.onWin(moves);
+    // Reports a Journey win once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
   const par = useMemo(() => minSteps(level, st.role, st.ghost.moves), [level, st]);
   const human = st.ghost.user !== 'bot';
   const postId = (() => {
@@ -256,7 +269,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday }: { st: St; tutor
     return (
       <div className="w">
         <div className="top">
-          <Tabs tab={tab} setTab={setTab} />
+          <Tabs tab={tab} setTab={setTab} onJourney={onJourney} />
           <span />
         </div>
         <div className="card">
@@ -270,6 +283,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday }: { st: St; tutor
             </div>
           ))}
           <div className="hint">Strangers who played with your runs: {st.uses}</div>
+          <Badges m={metricsOf(st)} />
         </div>
       </div>
     );
@@ -293,7 +307,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday }: { st: St; tutor
         </span>
       </div>
       <div className="top">
-        <Tabs tab={tab} setTab={setTab} />
+        <Tabs tab={tab} setTab={setTab} onJourney={onJourney} />
         <span>
           <button className="tab" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
           <button className="tab" onClick={() => setMusicState(!music)}>{music ? 'Music on' : 'Music off'}</button>
@@ -374,6 +388,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday }: { st: St; tutor
               <div style={{ fontSize: 26, color: '#f2b84b' }}>{'★'.repeat(nStars)}{'☆'.repeat(3 - nStars)}</div>
               <div className="hint">{tutorial.total === 1 ? 'Done' : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total} done`} in {moves.length} steps. Par is {par}.</div>
               <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? (tutorial.endLabel ?? "Start today's level") : `Next ${(tutorial.name ?? 'lesson').toLowerCase()}`}</button>
+              {tutorial.onBack && <button onClick={tutorial.onBack}>Level map</button>}
             </>
           ) : !res ? (
             <div>Adding your run to the chain...</div>
@@ -450,10 +465,58 @@ function Tutorial({ lessons, onDone, name, endLabel }: { lessons: Plan[]; onDone
   const st = useMemo<St>(() => {
     const sol = solve(parse(t.rows))!;
     const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
-    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0, yesterday: null };
+    return { day: 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0, yesterday: null, stats: { dailyStars: 0, dailyThree: 0, journey: [] } };
   }, [t]);
   const next = () => (i + 1 < lessons.length ? setI(i + 1) : onDone());
   return <Game key={i} st={st} tutorial={{ n: i + 1, total: lessons.length, tip: t.tip, onNext: next, name, endLabel }} />;
+}
+
+function JourneyMap({ st, onPick, onBack }: { st: St; onPick: (i: number) => void; onBack: () => void }) {
+  const done = st.stats.journey;
+  const m: Metrics = metricsOf(st);
+  return (
+    <div className="w">
+      <div className="top">
+        <span className="logo">Jour<b>ney</b></span>
+        <button className="tab" onClick={onBack}>Back</button>
+      </div>
+      <div className="hint">{m.cleared} of {JOURNEY.length} levels cleared, {m.stars} stars. Each level has a bot partner. Clear one to unlock the next.</div>
+      <div className="map">
+        {JOURNEY.map((_, i) => {
+          const stars = done[i] ?? 0;
+          const open = i === 0 || (done[i - 1] ?? 0) > 0;
+          return (
+            <button key={i} disabled={!open} className={stars ? 'lv done' : 'lv'} onClick={() => onPick(i)}>
+              {i + 1}
+              <small>{open ? '★'.repeat(stars) + '☆'.repeat(3 - stars) : 'locked'}</small>
+            </button>
+          );
+        })}
+      </div>
+      <div className="big">Badges</div>
+      <Badges m={m} />
+    </div>
+  );
+}
+
+function JourneyPlay({ level, base, onBack, onNext, onSaved }: { level: number; base: St; onBack: () => void; onNext: () => void; onSaved: (j: number[]) => void }) {
+  const rows = JOURNEY[level]!;
+  const role: Role = level % 2 ? 'B' : 'A';
+  const sol = useMemo(() => solve(parse(rows))!, [rows]);
+  const st = useMemo<St>(
+    () => ({ ...base, day: level, rows, role, ghost: { id: `j${level}`, moves: role === 'A' ? sol.b : sol.a, user: 'bot' } }),
+    [base, level, rows, role, sol]
+  );
+  const onWin = (moves: string) => {
+    fetch('/api/journey', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level, moves }) })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.ok) onSaved(j.journey);
+      })
+      .catch(() => undefined);
+  };
+  const lesson: Lesson = { n: level + 1, total: JOURNEY.length, tip: `Level ${level + 1}. Your partner is a bot.`, name: 'Level', endLabel: 'Back to the map', onNext, onBack, onWin };
+  return <Game key={level} st={st} tutorial={lesson} />;
 }
 
 function App() {
@@ -462,6 +525,8 @@ function App() {
   const [attempt, setAttempt] = useState(0);
   const [bonus, setBonus] = useState(false);
   const [yday, setYday] = useState(false);
+  const [jmap, setJmap] = useState(false);
+  const [jlevel, setJlevel] = useState<number | null>(null);
   const [pick, setPick] = useState(-1);
   useEffect(() => {
     fetch('/api/state')
@@ -494,6 +559,18 @@ function App() {
     };
     return <Tutorial lessons={TUTORIAL} onDone={done} />;
   }
+  if (jlevel !== null) {
+    return (
+      <JourneyPlay
+        level={jlevel}
+        base={st}
+        onBack={() => setJlevel(null)}
+        onNext={() => setJlevel(jlevel + 1 < JOURNEY.length ? jlevel + 1 : null)}
+        onSaved={(journey) => setSt({ ...st, stats: { ...st.stats, journey } })}
+      />
+    );
+  }
+  if (jmap) return <JourneyMap st={st} onPick={(i) => setJlevel(i)} onBack={() => setJmap(false)} />;
   if (yday && st.yesterday) {
     const y = st.yesterday;
     const yst: St = { ...st, day: st.day - 1, rows: y.rows, role: y.role, ghost: y.ghost };
@@ -520,11 +597,11 @@ function App() {
     ? { ...st, role: chosen.role === 'A' ? 'B' : 'A', ghost: { id: chosen.id, moves: chosen.moves, user: chosen.user, at: chosen.at } }
     : st;
   const nextPartner = () => setPick((p) => ((p < 0 ? list.length - 1 : p) + 1) % list.length);
-  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} {...(st.yesterday ? { onYesterday: () => setYday(true) } : {})} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
+  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} onJourney={() => setJmap(true)} {...(st.yesterday ? { onYesterday: () => setYday(true) } : {})} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
 }
 
 const style = document.createElement('style');
-style.textContent = css + chainCss;
+style.textContent = css + chainCss + badgeCss;
 document.head.appendChild(style);
 
 createRoot(document.getElementById('root')!).render(

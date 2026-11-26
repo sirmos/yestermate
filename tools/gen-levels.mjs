@@ -3,7 +3,8 @@
 import { parse, solve, step, start } from '../src/shared/sim.ts';
 import { writeFileSync } from 'node:fs';
 
-let seed = 20261111;
+const journey = process.env.JOURNEY === '1';
+let seed = journey ? 777001 : 20261111;
 const rnd = () => {
   seed = (seed + 0x6d2b79f5) | 0;
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -69,7 +70,7 @@ function solo(l, role) {
 }
 
 const found = new Map();
-for (let i = 0; i < 70000; i++) {
+for (let i = 0; i < (journey ? 52000 : 70000); i++) {
   const rows = build();
   if (!rows) continue;
   const id = rows.join('|');
@@ -84,21 +85,21 @@ for (let i = 0; i < 70000; i++) {
 }
 
 const all = [...found.values()].sort((a, b) => a.ticks - b.ticks);
-const want = 35;
+const want = journey ? 90 : 35;
 const spread = (list, n) => Array.from({ length: Math.min(n, list.length) }, (_, i) => list[Math.floor((i * list.length) / Math.min(n, list.length))]);
 const isGate = (c) => c.rows.join('').includes('T');
 const gateAll = all.filter(isGate);
 const wideAll = all.filter((c) => !isGate(c) && c.rows[0].length === 11);
 const stdAll = all.filter((c) => !isGate(c) && c.rows[0].length === 9);
-const gates = spread(gateAll, 12);
-const wide = spread(wideAll, 10);
+const gates = spread(gateAll, Math.round(want * 0.34));
+const wide = spread(wideAll, Math.round(want * 0.28));
 const std = spread(stdAll.slice(Math.floor(stdAll.length * 0.3)), want - gates.length - wide.length);
 const chosen = [...std, ...wide, ...gates].sort((a, b) => a.ticks - b.ticks);
 const firstPlain = chosen.findIndex((c) => !isGate(c) && c.rows[0].length === 9);
 chosen.unshift(...chosen.splice(firstPlain, 1));
 
 const tutorial = ['#########', '#A..X..g#', '#Bxh#...#', '#########'];
-const levels = [tutorial, ...chosen.map((c) => c.rows)];
+const levels = journey ? chosen.map((c) => c.rows) : [tutorial, ...chosen.map((c) => c.rows)];
 
 for (const rows of levels) {
   const l = parse(rows);
@@ -107,8 +108,8 @@ for (const rows of levels) {
 
 const body = levels.map((r) => '  [\n' + r.map((x) => `    '${x}',`).join('\n') + '\n  ],').join('\n');
 writeFileSync(
-  new URL('../src/shared/levels.ts', import.meta.url),
-  `// Made by tools/gen-levels.mjs. Level 0 is the tutorial. Do not edit by hand.\n// A, B = spawns. g = goal for A. h = goal for B. x, y = plates. X, Y = doors.\nexport const LEVELS: string[][] = [\n${body}\n];\n`
+  new URL(`../src/shared/${journey ? 'journey' : 'levels'}.ts`, import.meta.url),
+  `// Made by tools/gen-levels.mjs. Do not edit by hand.\n// A, B = spawns. g = goal for A. h = goal for B. x, y, z = plates. X, Y, Z = doors. T = silver gate.\nexport const ${journey ? 'JOURNEY' : 'LEVELS'}: string[][] = [\n${body}\n];\n`
 );
 console.log('gated', levels.filter((r) => r.join('').includes('T')).length);
 console.log('wide', levels.filter((r) => r[0].length === 11).length, 'doors3', levels.filter((r) => r.join('').includes('Z')).length);
