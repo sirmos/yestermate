@@ -402,14 +402,14 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
     top: `${((p.y - 1) / rows) * 100}%`,
   });
   return (
-    <div className="w">
+    <div className={moves.length > 0 && !finished ? 'w playing' : 'w'}>
       <div className="top">
         <span className="logo">Yester<b>mate</b></span>
         <span className="steps">
           {tutorial ? (tutorial.total === 1 ? (tutorial.name ?? 'Lesson') : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}`) : `${diff} · Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
         </span>
       </div>
-      <div className="top">
+      <div className="top chrome">
         <Tabs tab={tab} setTab={setTab} onJourney={onJourney} />
         <span>
           <button className="tab" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
@@ -417,7 +417,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
         </span>
       </div>
       {(sound || music) && (
-        <div className="vol">
+        <div className="vol chrome">
           {sound && (
             <label>
               Sound
@@ -539,31 +539,35 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
               <div className="hint">Your run is now someone's yestermate. Come back tomorrow to see who used it.</div>
               <div className="hint">{wordDone ? `Word found: ${word[0]}. You and your yestermate spelled it together.` : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${got.filter((g) => !g.by).length} letters missed.`}</div>
               {!res.practice && <Chain partners={st.partners} joined />}
-              <button onClick={copyResult}>{copied === 'ok' ? 'Result copied' : 'Copy result to share'}</button>
+              <div className="two">
+                <button onClick={copyResult}>{copied === 'ok' ? 'Copied' : 'Copy result'}</button>
+                {!res.practice && (
+                  <button disabled={posted} onClick={postResult}>{posted ? 'Posted' : 'Post to comments'}</button>
+                )}
+              </div>
               {copied === 'fail' && <div className="share">{shareText}</div>}
-              {!res.practice && <button disabled={posted} onClick={postResult}>{posted ? 'Posted to the comments' : 'Post my result in the comments'}</button>}
               {(human || postId) && (
-                <>
-                  {human && <div className="hint">Tell u/{st.ghost.user} how it went.</div>}
-                  <div className="two">
-                    {human && (
-                      <button disabled={thanked} onClick={sayThanks}>
-                        {thanked ? 'Thanks sent' : 'Say thanks'}
-                      </button>
-                    )}
-                    {postId && (
-                      <button onClick={() => navigateTo(`https://www.reddit.com/comments/${postId.replace(/^t3_/, '')}`)}>
-                        Comment
-                      </button>
-                    )}
-                  </div>
-                </>
+                <div className="two">
+                  {human && (
+                    <button disabled={thanked} onClick={sayThanks}>{thanked ? 'Thanks sent' : `Thank u/${st.ghost.user}`}</button>
+                  )}
+                  {postId && (
+                    <button onClick={() => navigateTo(`https://www.reddit.com/comments/${postId.replace(/^t3_/, '')}`)}>Comment</button>
+                  )}
+                </div>
               )}
-              {onPartner ? <button onClick={onPartner}>Play with another stranger</button> : <button onClick={() => setMoves('')}>Play again for practice</button>}
-              {onChoose && <button onClick={onChoose}>Choose a yestermate by name</button>}
-              {onWeekly && <button onClick={onWeekly}>Weekly Boss</button>}
-              {onYesterday && <button onClick={onYesterday}>Yesterday's puzzle, with yesterday's mate</button>}
-              {onBonus && <button onClick={onBonus}>Bonus puzzles with a bot</button>}
+              {onPartner ? (
+                <button className="main" onClick={onPartner}>Play with another stranger</button>
+              ) : (
+                <button className="main" onClick={() => setMoves('')}>Play again for practice</button>
+              )}
+              <details className="more">
+                <summary>More ways to play</summary>
+                {onChoose && <button onClick={onChoose}>Choose a yestermate by name</button>}
+                {onWeekly && <button onClick={onWeekly}>Weekly Boss</button>}
+                {onYesterday && <button onClick={onYesterday}>Yesterday's puzzle, with yesterday's mate</button>}
+                {onBonus && <button onClick={onBonus}>Bonus puzzles with a bot</button>}
+              </details>
             </>
           )}
         </div>
