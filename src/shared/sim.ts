@@ -183,7 +183,7 @@ export function trail(l: Level, role: Role, moves: string, ghost: string) {
   return { a, b };
 }
 
-export type Letter = { x: number; y: number; ch: string; slot: number; d: number };
+export type Letter = { x: number; y: number; ch: string; slot: number; d: number; decoy: boolean };
 
 // Puts the letters of a secret word on the board. Half lie on the solver's route,
 // so a partner following it picks them up. The rest sit one step off the route.
@@ -249,5 +249,25 @@ export function placeLetters(l: Level, word: string, seed: number): Letter[] {
   };
   [...r0.slice(0, Math.ceil(need / 2)), ...ring(1), ...r0, ...ring(2), ...ring(3), ...shuffle(all)].forEach(add);
   const slots = shuffle(Array.from({ length: chosen.length }, (_, i) => i));
-  return chosen.map((p, i) => ({ x: p.x, y: p.y, slot: slots[i]!, ch: word[slots[i]!]!, d: dist.get(key(p)) ?? 9 }));
+  const out: Letter[] = chosen.map((p, i) => ({ x: p.x, y: p.y, slot: slots[i]!, ch: word[slots[i]!]!, d: dist.get(key(p)) ?? 9, decoy: false }));
+  // Wrong letters. Picking one up jams the word, so the riddle has to be read.
+  const spare = shuffle([...'ABCDEGHIKLMNOPRSTUW'].filter((c) => !word.includes(c)));
+  const room = [...ring(1), ...ring(2)].filter((p) => !used.has(key(p)));
+  const decoys = Math.min(Math.ceil(word.length / 3), room.length, spare.length);
+  for (let i = 0; i < decoys; i++) {
+    out.push({ x: room[i]!.x, y: room[i]!.y, slot: -1, ch: spare[i]!, d: dist.get(key(room[i]!)) ?? 9, decoy: true });
+  }
+  return out;
+}
+
+// 1 star for finishing, 1 for spelling the word with no wrong letter, 1 for few steps.
+export function wordStars(l: Level, role: Role, moves: string, ghost: string, steps: number, par: number | null, word: string, seed: number) {
+  const letters = placeLetters(l, word, seed);
+  const t = trail(l, role, moves, ghost);
+  const mine = role === 'A' ? t.a : t.b;
+  const theirs = role === 'A' ? t.b : t.a;
+  const on = (path: P[], q: Letter) => path.some((p) => p.x === q.x && p.y === q.y);
+  const done = letters.filter((q) => !q.decoy).every((q) => on(mine, q) || on(theirs, q)) && !letters.some((q) => q.decoy && on(mine, q));
+  const slack = 2 + letters.reduce((n, q) => n + (q.decoy ? 0 : 2 * q.d), 0);
+  return { stars: 1 + (done ? 1 : 0) + (par !== null && steps <= par + slack ? 1 : 0), done };
 }

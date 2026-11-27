@@ -5,7 +5,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { parse } from '../shared/sim';
 import { Chain, chainCss } from './chain';
-import { themeCss } from './theme';
+import { ENVS, themeCss } from './theme';
 
 type Info = {
   day: number;
@@ -87,6 +87,10 @@ function Splash() {
       .then(setInfo)
       .catch(() => setInfo(null));
   }, []);
+
+  useEffect(() => {
+    if (info) document.body.dataset.env = ENVS[info.day % ENVS.length]!;
+  }, [info]);
 
   const partner = info ? (info.ghost.user === 'bot' ? 'a bot' : `u/${info.ghost.user}`) : '';
 

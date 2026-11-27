@@ -65,6 +65,7 @@ createServer((req, res) => {
       thanks: 2,
       community: { wins: 24, links: 17, streak: 3, goal: 25 },
       avatar: null,
+      hearts: { n: 4, nextIn: 600 },
       weekly: { level: 70, best: null, top: [{ member: 'mara_k', score: 14 }] },
       stats: { dailyStars: 12, dailyThree: 3, journey },
       partners: [...links.values()].filter((l) => l.id.startsWith(`${day}-`)).map((l) => ({ ...l, at: l.at ?? 0 })),
@@ -107,6 +108,7 @@ createServer((req, res) => {
     });
     return;
   }
+  if (path === '/api/hearts/spend') return send(res, 200, { ok: true, hearts: { n: 3, nextIn: 600 } });
   if (path === '/api/weekly') return send(res, 200, { ok: true, steps: 12 });
   if (path === '/api/thanks') return send(res, 200, { ok: true });
   if (path === '/api/tutorial-done') {

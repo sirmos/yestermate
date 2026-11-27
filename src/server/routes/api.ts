@@ -2,14 +2,14 @@ import { Hono } from 'hono';
 import { context, reddit, redis } from '@devvit/web/server';
 import { LEVELS } from '../../shared/levels';
 import { JOURNEY } from '../../shared/journey';
-import { minSteps, parse, replay, solve, validate, type Role } from '../../shared/sim';
+import { minSteps, parse, replay, solve, validate, wordStars, type Role } from '../../shared/sim';
+import { WORDS } from '../../shared/words';
 
 export const api = new Hono();
 
 const DAY0 = Date.UTC(2026, 10, 11);
 const today = () => Math.floor((Date.now() - DAY0) / 86400000);
 const levelForDay = (d: number) => parse(LEVELS[d % LEVELS.length]!);
-const starsFor = (steps: number, par: number | null) => (par ? (steps <= par ? 3 : steps <= par + 2 ? 2 : 1) : 1);
 const weeklyIndex = (week: number) => Math.max(0, JOURNEY.length - 30) + (week % Math.min(30, JOURNEY.length));
 const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500];
 
@@ -28,6 +28,29 @@ const getStats = async (user: string): Promise<Stats> =>
 // Each day keeps: link:<id> (a run), idz:<day> (sorted list of run ids),
 // count:<day> (an atomic counter) and head:<day> (the newest run).
 // Every write is a single atomic call, so simultaneous players cannot overwrite each other.
+// Hearts: 5 at most, one comes back every 15 minutes. Restarting a Journey level spends one.
+const MAX_HEARTS = 5;
+const REGEN = 15 * 60 * 1000;
+async function readHearts(user: string) {
+  const h = (await getJson<{ n: number; at: number }>(`hearts:${user}`)) ?? { n: MAX_HEARTS, at: Date.now() };
+  const now = Date.now();
+  let n = h.n;
+  let at = h.at;
+  if (n < MAX_HEARTS) {
+    const gained = Math.floor((now - at) / REGEN);
+    if (gained > 0) {
+      n = Math.min(MAX_HEARTS, n + gained);
+      at = n >= MAX_HEARTS ? now : at + gained * REGEN;
+    }
+  }
+  return { n, at, nextIn: n >= MAX_HEARTS ? 0 : Math.max(0, Math.ceil((at + REGEN - now) / 1000)) };
+}
+async function giveHeart(user: string, by: number) {
+  const h = await readHearts(user);
+  const n = Math.max(0, Math.min(MAX_HEARTS, h.n + by));
+  await redis.set(`hearts:${user}`, JSON.stringify({ n, at: h.n >= MAX_HEARTS ? Date.now() : h.at }));
+}
+
 async function ensureDay(day: number): Promise<void> {
   if (await redis.get(`head:${day}`)) return;
   const s = solve(levelForDay(day));
@@ -110,6 +133,7 @@ api.get('/state', async (c) => {
     community,
     avatar,
     weekly,
+    hearts: await readHearts(user).then((h) => ({ n: h.n, nextIn: h.nextIn })),
   });
 });
 
@@ -144,7 +168,8 @@ api.post('/submit', async (c) => {
   const count = streak0 && streak0.last === day - 1 ? streak0.count + 1 : streak0 && streak0.last === day ? streak0.count : 1;
   await redis.set(`streak:${user}`, JSON.stringify({ last: day, count }));
 
-  const dstars = starsFor(result.ticks, minSteps(level, role, ghost.moves));
+  const dstars = wordStars(level, role, moves.padEnd(result.ticks, '0'), ghost.moves, result.ticks, minSteps(level, role, ghost.moves), WORDS[day % WORDS.length]![0], day).stars;
+  await giveHeart(user, 1);
   const dstats = await getStats(user);
   await redis.set(
     `stats:${user}`,
@@ -191,6 +216,7 @@ api.post('/thanks', async (c) => {
   if (!ghost || ghost.user === 'bot' || ghost.user === user) return c.json({ ok: false }, 400);
   if ((await redis.incrBy(`thanked:${ghostId}:${user}`, 1)) > 1) return c.json({ ok: true, already: true });
   await redis.incrBy(`thanks:${ghost.user}`, 1);
+  await giveHeart(ghost.user, 1);
   return c.json({ ok: true });
 });
 
@@ -208,12 +234,15 @@ api.post('/journey', async (c) => {
   const ghost = role === 'A' ? sol.b : sol.a;
   const res = validate(l, role, String(body.moves ?? ''), ghost);
   if (!res.won) return c.json({ ok: false }, 400);
-  const stars = starsFor(res.ticks, minSteps(l, role, ghost) ?? res.ticks);
+  const par = minSteps(l, role, ghost) ?? res.ticks;
+  const stars = wordStars(l, role, String(body.moves ?? '').padEnd(res.ticks, '0'), ghost, res.ticks, par, WORDS[body.level % WORDS.length]![0], body.level).stars;
   const journey = [...stats.journey];
   for (let i = 0; i < body.level; i++) journey[i] = journey[i] ?? 0;
   journey[body.level] = Math.max(journey[body.level] ?? 0, stars);
   await redis.set(`stats:${user}`, JSON.stringify({ ...stats, journey }));
-  return c.json({ ok: true, stars, journey });
+  if (stars === 3) await giveHeart(user, 1);
+  const hh = await readHearts(user);
+  return c.json({ ok: true, stars, journey, hearts: { n: hh.n, nextIn: hh.nextIn } });
 });
 
 api.post('/weekly', async (c) => {
@@ -249,4 +278,13 @@ api.post('/share', async (c) => {
   } catch {
     return c.json({ ok: false }, 500);
   }
+});
+
+api.post('/hearts/spend', async (c) => {
+  const user = await who();
+  const h = await readHearts(user);
+  if (h.n < 1) return c.json({ ok: false, hearts: { n: h.n, nextIn: h.nextIn } });
+  await redis.set(`hearts:${user}`, JSON.stringify({ n: h.n - 1, at: h.n >= MAX_HEARTS ? Date.now() : h.at }));
+  const after = await readHearts(user);
+  return c.json({ ok: true, hearts: { n: after.n, nextIn: after.nextIn } });
 });

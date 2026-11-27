@@ -85,7 +85,10 @@ test('every daily word fits on its level and can be partly collected on the solv
   for (let day = 0; day < LEVELS.length; day++) {
     const l = parse(LEVELS[day % LEVELS.length]!);
     const [word] = WORDS[day % WORDS.length]!;
-    const letters = placeLetters(l, word, day);
+    const everything = placeLetters(l, word, day);
+    const letters = everything.filter((x) => !x.decoy);
+    assert.equal(new Set(everything.map((x) => `${x.x},${x.y}`)).size, everything.length, `day ${day}: a decoy shares a cell`);
+    assert.ok(everything.filter((x) => x.decoy).every((x) => !word.includes(x.ch) && x.d >= 1), `day ${day}: bad decoy`);
     assert.equal(letters.length, word.length, `day ${day}: wrong letter count`);
     assert.equal(new Set(letters.map((x) => `${x.x},${x.y}`)).size, word.length, `day ${day}: letters share a cell`);
     assert.equal(letters.map((x) => x.ch).sort().join(''), [...word].sort().join(''), `day ${day}: letters do not spell the word`);

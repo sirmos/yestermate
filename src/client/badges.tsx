@@ -27,6 +27,7 @@ const LIST: { name: string; key: keyof Metrics; goal: number }[] = [
   { name: '10 levels cleared', key: 'cleared', goal: 10 },
   { name: '25 levels cleared', key: 'cleared', goal: 25 },
   { name: '50 levels cleared', key: 'cleared', goal: 50 },
+  { name: 'Journey complete', key: 'cleared', goal: 90 },
   { name: 'Good partner', key: 'thanks', goal: 5 },
   { name: 'Crowd favorite', key: 'used', goal: 25 },
 ];
