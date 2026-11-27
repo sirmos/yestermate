@@ -14,6 +14,9 @@ button:active{transform:translateY(3px);box-shadow:0 0 0 #171a26}
 .big{text-shadow:0 0 18px rgba(242,184,75,.35)}
 .go{box-shadow:0 0 26px rgba(242,184,75,.45),0 4px 0 #b88a2e}
 .w.playing .chrome{display:none}
+.vol{flex-wrap:wrap}
+.pad button{padding:10px 0}
+.pad{gap:6px}
 .hint{font-size:14px;opacity:.9}
 .main{background:linear-gradient(#f4c862,#e0a52e);color:#14161c;font-weight:800;box-shadow:0 3px 0 #b88a2e,0 6px 14px rgba(0,0,0,.25)}
 .more{display:flex;flex-direction:column;gap:8px}

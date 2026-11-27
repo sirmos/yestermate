@@ -218,6 +218,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const [thanked, setThanked] = useState(false);
   const [copied, setCopied] = useState<'no' | 'ok' | 'fail'>('no');
   const [posted, setPosted] = useState(false);
+  const [audioOpen, setAudioOpen] = useState(false);
   const [tries, setTries] = useState(0);
   const [sound, setSoundRaw] = useState(soundOn);
   const [music, setMusicRaw] = useState(musicOn);
@@ -351,7 +352,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const onPlate = (c: string) => 'xyz'.includes(c);
   const baseHint =
     moves.length === 0
-      ? `Each move is one step for you and your yestermate. Your yestermate is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.${tutorial ? '' : ' Walk over the glowing letters to spell the answer to the riddle.'}`
+      ? `Every move is one step for both of you. Your yestermate is ${st.ghost.user === 'bot' ? 'a bot' : 'u/' + st.ghost.user + (st.ghost.at ? ', who played ' + ago(st.ghost.at) : '')}, and their moves are fixed.${tutorial ? '' : ' Collect the letters to spell the answer.'}`
       : rep.blocked
         ? 'Your yestermate is waiting at the glowing door. Stand on the glowing ring to open it. For a silver gate, just wait for the beat.'
         : onPlate(cellAt(me))
@@ -411,25 +412,18 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
       </div>
       <div className="top chrome">
         <Tabs tab={tab} setTab={setTab} onJourney={onJourney} />
-        <span>
-          <button className="tab" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
-          <button className="tab" onClick={() => setMusicState(!music)}>{music ? 'Music on' : 'Music off'}</button>
-        </span>
+        <button className="tab" onClick={() => setAudioOpen((v) => !v)}>Audio</button>
       </div>
-      {(sound || music) && (
+      {audioOpen && (
         <div className="vol chrome">
-          {sound && (
-            <label>
-              Sound
-              <input type="range" min="0" max="1" step="0.05" value={sfx} onChange={(e) => { sfxVol = Number(e.target.value); setSfx(sfxVol); }} />
-            </label>
-          )}
-          {music && (
-            <label>
-              Music
-              <input type="range" min="0" max="1" step="0.05" value={mus} onChange={(e) => { musicVol = Number(e.target.value); setMus(musicVol); setMusicVol(musicVol); }} />
-            </label>
-          )}
+          <label>
+            <button className="tab" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
+            <input type="range" min="0" max="1" step="0.05" value={sfx} onChange={(e) => { sfxVol = Number(e.target.value); setSfx(sfxVol); }} />
+          </label>
+          <label>
+            <button className="tab" onClick={() => setMusicState(!music)}>{music ? 'Music on' : 'Music off'}</button>
+            <input type="range" min="0" max="1" step="0.05" value={mus} onChange={(e) => { musicVol = Number(e.target.value); setMus(musicVol); setMusicVol(musicVol); }} />
+          </label>
         </div>
       )}
 
