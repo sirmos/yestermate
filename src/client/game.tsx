@@ -105,9 +105,25 @@ button:disabled{opacity:.55}
 @keyframes rise{from{transform:translateY(14px);opacity:0}}
 `;
 
+const pref = (key: string, fallback: boolean) => {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+};
+const savePref = (key: string, on: boolean) => {
+  try {
+    localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    // Storage can be unavailable. The setting then lasts for the session only.
+  }
+};
+
 let audio: AudioContext | null = null;
-let soundOn = false;
-let musicOn = false;
+let soundOn = pref('ym-sound', true);
+let musicOn = pref('ym-music', true);
 let sfxVol = 0.7;
 let musicVol = 0.7;
 
@@ -133,6 +149,7 @@ const beep = (freq: number, ms = 90) => tone(freq, ms, 0.3 * sfxVol, 'triangle')
 
 function setMusic(on: boolean) {
   musicOn = on;
+  savePref('ym-music', on);
   setMusicEngine(on);
 }
 
@@ -247,6 +264,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const [mus, setMus] = useState(musicVol);
   const setSound = (on: boolean) => {
     soundOn = on;
+    savePref('ym-sound', on);
     setSoundRaw(on);
   };
   const setMusicState = (on: boolean) => {
@@ -941,6 +959,18 @@ function BadgePopup({ names, onClose }: { names: string[]; onClose: () => void }
 function Root() {
   const [pop, setPop] = useState<string[]>([]);
   const known = useRef<string[] | null>(null);
+  // Browsers only allow sound after a first tap or key press, so music begins then.
+  useEffect(() => {
+    const begin = () => {
+      if (musicOn) setMusicEngine(true);
+    };
+    window.addEventListener('pointerdown', begin, { once: true });
+    window.addEventListener('keydown', begin, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', begin);
+      window.removeEventListener('keydown', begin);
+    };
+  }, []);
   const check = useCallback((s: St) => {
     if (known.current === null) known.current = s.seen ?? [];
     const fresh = earnedNames(metricsOf(s)).filter((n) => !known.current!.includes(n));
