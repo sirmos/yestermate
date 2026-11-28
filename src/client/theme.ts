@@ -47,4 +47,12 @@ body[data-env=ocean]{--c1:#2b4a60;--c2:#223c52;--glow:#1f4a66}
 body[data-env=ember]{--c1:#553235;--c2:#452a33;--glow:#5a2630}
 body[data-env=frost]{--c1:#3b4f66;--c2:#2f4258;--glow:#35506e}
 .jam{color:#e8735a;font-weight:700;opacity:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{padding:6px 10px;font-size:12px;border-radius:999px}
+.note{font-size:13px;color:#f6e7c8;background:rgba(242,184,75,.12);border:1px solid rgba(242,184,75,.35);border-radius:12px;padding:6px 12px;text-align:center}
+.tab{white-space:nowrap}
+.slot.hint{color:#8d95ad;border-style:solid;border-color:#4a516a}
+.pop{position:fixed;inset:0;background:rgba(8,10,16,.72);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+.popcard{position:relative;overflow:hidden;background:linear-gradient(160deg,#2b3150,#202435);border:1px solid rgba(242,184,75,.5);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 40px rgba(242,184,75,.25);animation:rise .35s ease;color:#ece8df}
+.popcard .bdg{font-size:15px;padding:7px 14px}
 `;

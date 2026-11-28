@@ -252,7 +252,13 @@ export function placeLetters(l: Level, word: string, seed: number): Letter[] {
   const out: Letter[] = chosen.map((p, i) => ({ x: p.x, y: p.y, slot: slots[i]!, ch: word[slots[i]!]!, d: dist.get(key(p)) ?? 9, decoy: false }));
   // Wrong letters. Picking one up jams the word, so the riddle has to be read.
   const spare = shuffle([...'ABCDEGHIKLMNOPRSTUW'].filter((c) => !word.includes(c)));
-  const room = [...ring(1), ...ring(2)].filter((p) => !used.has(key(p)));
+  const seenRoom = new Set<string>();
+  const room = [...ring(1), ...ring(2), ...ring(3), ...shuffle(all)].filter((p) => {
+    const k = key(p);
+    if (used.has(k) || seenRoom.has(k) || (dist.get(k) ?? 9) < 1) return false;
+    seenRoom.add(k);
+    return true;
+  });
   const decoys = Math.min(Math.ceil(word.length / 3), room.length, spare.length);
   for (let i = 0; i < decoys; i++) {
     out.push({ x: room[i]!.x, y: room[i]!.y, slot: -1, ch: spare[i]!, d: dist.get(key(room[i]!)) ?? 9, decoy: true });
@@ -270,4 +276,37 @@ export function wordStars(l: Level, role: Role, moves: string, ghost: string, st
   const done = letters.filter((q) => !q.decoy).every((q) => on(mine, q) || on(theirs, q)) && !letters.some((q) => q.decoy && on(mine, q));
   const slack = 2 + letters.reduce((n, q) => n + (q.decoy ? 0 : 2 * q.d), 0);
   return { stars: 1 + (done ? 1 : 0) + (par !== null && steps <= par + slack ? 1 : 0), done };
+}
+
+// Picks a word that leaves room for wrong letters: enough free tiles off the solver's route.
+export function pickWord(l: Level, words: [string, string][], index: number): [string, string] {
+  const key = (p: P) => `${p.x},${p.y}`;
+  const onRoute = new Set<string>();
+  const sol = solve(l);
+  if (sol) {
+    let s = start(l);
+    for (let t = 0; t < sol.a.length; t++) {
+      s = step(l, s, Number(sol.a[t]), Number(sol.b[t]));
+      onRoute.add(key(s.a));
+      onRoute.add(key(s.b));
+    }
+  }
+  const reserved = new Set([key(l.a), key(l.b), key(l.ga), key(l.gb)]);
+  let routeFree = 0;
+  let offRoute = 0;
+  for (let y = 0; y < l.cells.length; y++) {
+    for (let x = 0; x < (l.cells[0]?.length ?? 0); x++) {
+      const p = { x, y };
+      if (at(l, p) !== '.' || reserved.has(key(p))) continue;
+      if (onRoute.has(key(p))) routeFree++;
+      else offRoute++;
+    }
+  }
+  for (let i = 0; i < words.length; i++) {
+    const w = words[(index + i) % words.length]!;
+    const len = w[0].length;
+    const take = Math.min(Math.ceil(len / 2), routeFree);
+    if (len - take + Math.ceil(len / 3) <= offRoute) return w;
+  }
+  return words.reduce((a, b) => (b[0].length < a[0].length ? b : a));
 }

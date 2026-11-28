@@ -3,7 +3,7 @@
 // @ts-nocheck
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_TICKS, minSteps, parse, placeLetters, solve, start, step, trail, validate, type Level } from './sim.ts';
+import { MAX_TICKS, minSteps, parse, pickWord, placeLetters, solve, start, step, trail, validate, type Level } from './sim.ts';
 import { LEVELS } from './levels.ts';
 import { JOURNEY } from './journey.ts';
 import { WORDS } from './words.ts';
@@ -84,11 +84,12 @@ test('every journey level can be won in both roles, and none repeat', () => {
 test('every daily word fits on its level and can be partly collected on the solver route', () => {
   for (let day = 0; day < LEVELS.length; day++) {
     const l = parse(LEVELS[day % LEVELS.length]!);
-    const [word] = WORDS[day % WORDS.length]!;
+    const [word] = pickWord(l, WORDS, day);
     const everything = placeLetters(l, word, day);
     const letters = everything.filter((x) => !x.decoy);
     assert.equal(new Set(everything.map((x) => `${x.x},${x.y}`)).size, everything.length, `day ${day}: a decoy shares a cell`);
     assert.ok(everything.filter((x) => x.decoy).every((x) => !word.includes(x.ch) && x.d >= 1), `day ${day}: bad decoy`);
+    assert.ok(everything.some((x) => x.decoy), `day ${day}: no decoy letter`);
     assert.equal(letters.length, word.length, `day ${day}: wrong letter count`);
     assert.equal(new Set(letters.map((x) => `${x.x},${x.y}`)).size, word.length, `day ${day}: letters share a cell`);
     assert.equal(letters.map((x) => x.ch).sort().join(''), [...word].sort().join(''), `day ${day}: letters do not spell the word`);

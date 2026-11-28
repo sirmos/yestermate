@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { context, reddit, redis } from '@devvit/web/server';
 import { LEVELS } from '../../shared/levels';
 import { JOURNEY } from '../../shared/journey';
-import { minSteps, parse, replay, solve, validate, wordStars, type Role } from '../../shared/sim';
+import { minSteps, parse, pickWord, replay, solve, validate, wordStars, type Role } from '../../shared/sim';
 import { WORDS } from '../../shared/words';
 
 export const api = new Hono();
@@ -13,7 +13,7 @@ const levelForDay = (d: number) => parse(LEVELS[d % LEVELS.length]!);
 const weeklyIndex = (week: number) => Math.max(0, JOURNEY.length - 30) + (week % Math.min(30, JOURNEY.length));
 const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500];
 
-type Link = { id: string; role: Role; moves: string; user: string; at?: number };
+type Link = { id: string; role: Role; moves: string; user: string; at?: number; note?: number };
 type Stats = { dailyStars: number; dailyThree: number; journey: number[] };
 
 async function getJson<T>(key: string): Promise<T | null> {
@@ -28,9 +28,9 @@ const getStats = async (user: string): Promise<Stats> =>
 // Each day keeps: link:<id> (a run), idz:<day> (sorted list of run ids),
 // count:<day> (an atomic counter) and head:<day> (the newest run).
 // Every write is a single atomic call, so simultaneous players cannot overwrite each other.
-// Hearts: 5 at most, one comes back every 15 minutes. Restarting a Journey level spends one.
+// Hearts: 5 at most, one comes back every 30 minutes. Restarting a Journey level spends one.
 const MAX_HEARTS = 5;
-const REGEN = 15 * 60 * 1000;
+const REGEN = 30 * 60 * 1000;
 async function readHearts(user: string) {
   const h = (await getJson<{ n: number; at: number }>(`hearts:${user}`)) ?? { n: MAX_HEARTS, at: Date.now() };
   const now = Date.now();
@@ -78,7 +78,7 @@ api.get('/state', async (c) => {
   const found = await Promise.all(members.slice(-13).map((m) => getJson<Link>(`link:${m.member}`)));
   const partners = found
     .filter((l): l is Link => !!l)
-    .map((l) => ({ id: l.id, role: l.role, moves: l.moves, user: l.user, at: l.at ?? 0 }));
+    .map((l) => ({ id: l.id, role: l.role, moves: l.moves, user: l.user, at: l.at ?? 0, note: l.note ?? -1 }));
 
   const y = day > 0 ? await dayInfo(day - 1) : null;
   const yesterday = y
@@ -118,7 +118,7 @@ api.get('/state', async (c) => {
     day,
     rows: LEVELS[day % LEVELS.length]!,
     role: (head.role === 'A' ? 'B' : 'A') as Role,
-    ghost: { id: head.id, moves: head.moves, user: head.user, at: head.at ?? 0 },
+    ghost: { id: head.id, moves: head.moves, user: head.user, at: head.at ?? 0, note: head.note ?? -1 },
     humans,
     played: !!(await redis.get(`played:${day}:${user}`)),
     streak: streak && streak.last >= day - 1 ? streak.count : 0,
@@ -134,6 +134,7 @@ api.get('/state', async (c) => {
     avatar,
     weekly,
     hearts: await readHearts(user).then((h) => ({ n: h.n, nextIn: h.nextIn })),
+    seen: (await getJson<string[]>(`badges:${user}`)) ?? [],
   });
 });
 
@@ -168,7 +169,7 @@ api.post('/submit', async (c) => {
   const count = streak0 && streak0.last === day - 1 ? streak0.count + 1 : streak0 && streak0.last === day ? streak0.count : 1;
   await redis.set(`streak:${user}`, JSON.stringify({ last: day, count }));
 
-  const dstars = wordStars(level, role, moves.padEnd(result.ticks, '0'), ghost.moves, result.ticks, minSteps(level, role, ghost.moves), WORDS[day % WORDS.length]![0], day).stars;
+  const dstars = wordStars(level, role, moves.padEnd(result.ticks, '0'), ghost.moves, result.ticks, minSteps(level, role, ghost.moves), pickWord(level, WORDS, day)[0], day).stars;
   await giveHeart(user, 1);
   const dstats = await getStats(user);
   await redis.set(
@@ -235,7 +236,7 @@ api.post('/journey', async (c) => {
   const res = validate(l, role, String(body.moves ?? ''), ghost);
   if (!res.won) return c.json({ ok: false }, 400);
   const par = minSteps(l, role, ghost) ?? res.ticks;
-  const stars = wordStars(l, role, String(body.moves ?? '').padEnd(res.ticks, '0'), ghost, res.ticks, par, WORDS[body.level % WORDS.length]![0], body.level).stars;
+  const stars = wordStars(l, role, String(body.moves ?? '').padEnd(res.ticks, '0'), ghost, res.ticks, par, pickWord(l, WORDS, body.level)[0], body.level).stars;
   const journey = [...stats.journey];
   for (let i = 0; i < body.level; i++) journey[i] = journey[i] ?? 0;
   journey[body.level] = Math.max(journey[body.level] ?? 0, stars);
@@ -287,4 +288,41 @@ api.post('/hearts/spend', async (c) => {
   await redis.set(`hearts:${user}`, JSON.stringify({ n: h.n - 1, at: h.n >= MAX_HEARTS ? Date.now() : h.at }));
   const after = await readHearts(user);
   return c.json({ ok: true, hearts: { n: after.n, nextIn: after.nextIn } });
+});
+
+// A short preset note for the next stranger. Presets only, so there is nothing to moderate.
+api.post('/note', async (c) => {
+  const user = await who();
+  const { note } = await c.req.json<{ note: number }>();
+  if (!Number.isInteger(note) || note < 0 || note > 7) return c.json({ ok: false }, 400);
+  const id = await redis.get(`played:${today()}:${user}`);
+  if (!id) return c.json({ ok: false }, 400);
+  const link = await getJson<Link>(`link:${id}`);
+  if (!link || link.user !== user) return c.json({ ok: false }, 400);
+  await redis.set(`link:${id}`, JSON.stringify({ ...link, note }));
+  return c.json({ ok: true });
+});
+
+api.get('/progress', async (c) => {
+  const day = today();
+  const user = await who();
+  const streak = await getJson<{ last: number; count: number }>(`streak:${user}`);
+  const h = await readHearts(user);
+  return c.json({
+    stats: await getStats(user),
+    streak: streak && streak.last >= day - 1 ? streak.count : 0,
+    thanks: await num(`thanks:${user}`),
+    uses: await num(`uses:${user}`),
+    hearts: { n: h.n, nextIn: h.nextIn },
+    seen: (await getJson<string[]>(`badges:${user}`)) ?? [],
+  });
+});
+
+api.post('/badges/seen', async (c) => {
+  const user = await who();
+  const { names } = await c.req.json<{ names: string[] }>();
+  const old = (await getJson<string[]>(`badges:${user}`)) ?? [];
+  const next = [...new Set([...old, ...(Array.isArray(names) ? names.map(String).slice(0, 30) : [])])];
+  await redis.set(`badges:${user}`, JSON.stringify(next));
+  return c.json({ ok: true });
 });

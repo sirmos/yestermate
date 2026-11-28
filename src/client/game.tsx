@@ -1,20 +1,20 @@
 import './index.css';
-import { StrictMode, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { context, navigateTo } from '@devvit/web/client';
 import { Chain, chainCss } from './chain';
 import { ENVS, themeCss } from './theme';
-import { Badges, badgeCss, metricsOf, type Metrics, type Stats } from './badges';
+import { Badges, badgeCss, earnedNames, metricsOf, type Metrics, type Stats } from './badges';
 import { JOURNEY } from '../shared/journey';
 import { setMusic as setMusicEngine, setMusicVol } from './music';
-import { MAX_TICKS, minSteps, parse, placeLetters, replay, solve, trail, type Role } from '../shared/sim';
+import { MAX_TICKS, minSteps, parse, pickWord, placeLetters, replay, solve, trail, type Role } from '../shared/sim';
 import { WORDS } from '../shared/words';
 import { LEVELS } from '../shared/levels';
 
 type St = {
   rows: string[];
   role: Role;
-  ghost: { id: string; moves: string; user: string; at?: number | undefined };
+  ghost: { id: string; moves: string; user: string; at?: number | undefined; note?: number | undefined };
   humans: number;
   played: boolean;
   streak: number;
@@ -25,6 +25,7 @@ type St = {
   thanks: number;
   stats: Stats;
   hearts: { n: number; nextIn: number };
+  seen: string[];
   community: { wins: number; links: number; streak: number; goal: number };
   avatar: string | null;
   weekly: { level: number; best: number | null; top: { member: string; score: number }[] };
@@ -135,6 +136,17 @@ function setMusic(on: boolean) {
   setMusicEngine(on);
 }
 
+const NOTES = [
+  'Good luck!',
+  'Watch the gate beat.',
+  'Hold the door for me!',
+  'The first letter is easy.',
+  'Take your time.',
+  'You have got this!',
+  'Thanks for waiting at my door.',
+  'Spell it out, friend.',
+];
+
 const ago = (t?: number) => {
   if (!t) return '';
   const m = Math.max(1, Math.round((Date.now() - t) / 60000));
@@ -208,10 +220,10 @@ function Tabs({ tab, setTab, onJourney }: { tab: string; setTab: (t: 'play' | 'b
   );
 }
 
-type Partner = { id: string; role: Role; moves: string; user: string; at: number };
+type Partner = { id: string; role: Role; moves: string; user: string; at: number; note?: number | undefined };
 type Lesson = { n: number; total: number; tip: string; onNext: () => void; name?: string | undefined; endLabel?: string | undefined; onWin?: ((moves: string) => void) | undefined; onBack?: (() => void) | undefined; onSpend?: (() => Promise<boolean>) | undefined };
 
-function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoose, onWeekly }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void; onYesterday?: () => void; onJourney?: () => void; onChoose?: () => void; onWeekly?: () => void }) {
+function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoose, onWeekly, onRefresh }: { st: St; tutorial?: Lesson; onBonus?: () => void; onPartner?: () => void; onYesterday?: () => void; onJourney?: () => void; onChoose?: () => void; onWeekly?: () => void; onRefresh?: () => void }) {
   const level = useMemo(() => parse(st.rows), [st.rows]);
   const [moves, setMoves] = useState('');
   const [res, setRes] = useState<Result | null>(null);
@@ -221,6 +233,9 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const [posted, setPosted] = useState(false);
   const [audioOpen, setAudioOpen] = useState(false);
   const [noHeart, setNoHeart] = useState(false);
+  const [noteSent, setNoteSent] = useState<number | null>(null);
+  const [hints, setHints] = useState(0);
+  const lockRef = useRef(false);
   const [light, setLight] = useState(() => document.body.classList.contains('light'));
   const toggleTheme = () => setLight(document.body.classList.toggle('light'));
   const [tries, setTries] = useState(0);
@@ -252,7 +267,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   useEffect(() => {
     document.body.dataset.env = ENVS[envIndex % ENVS.length]!;
   }, [envIndex]);
-  const word = WORDS[st.day % WORDS.length]!;
+  const word = useMemo(() => pickWord(level, WORDS, st.day), [level, st.day]);
   const letters = useMemo(() => (wordMode ? placeLetters(level, word[0], st.day) : []), [level, word, st.day, wordMode]);
   const tr = useMemo(() => (wordMode ? trail(level, st.role, moves, st.ghost.moves) : { a: [], b: [] }), [level, moves, st, wordMode]);
   const mineTrail = st.role === 'A' ? tr.a : tr.b;
@@ -262,9 +277,12 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const slotView = [...word[0]].map((c, i) => ({ c, by: got.find((g) => g.slot === i)?.by ?? '' }));
   const wordShown = slotView.map((v) => (v.by ? v.c : '_')).join('');
   const jam = got.some((g) => g.decoy && g.by === 'me');
+  lockRef.current = jam;
+  const missed = got.filter((g) => !g.decoy && !g.by).length;
+  const hinted = (i: number) => (hints >= 1 && i === 0) || (hints >= 2 && i === word[0].length - 1);
   const wordDone = got.some((g) => !g.decoy) && got.filter((g) => !g.decoy).every((g) => g.by) && !jam;
   const diff = tutorial ? '' : difficultyOf(st.rows, par);
-  const wordLine = wordDone ? `Word found: ${word[0]}.` : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${got.filter((g) => !g.decoy && !g.by).length} letters missed.`;
+  const wordLine = wordDone ? `Word found: ${word[0]}.` : jam ? 'A wrong letter jammed the word.' : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${missed} letter${missed === 1 ? '' : 's'} missed.`;
   const human = st.ghost.user !== 'bot';
   const postId = (() => {
     try {
@@ -279,6 +297,14 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: shareText }),
+    }).catch(() => undefined);
+  };
+  const sendNote = (i: number) => {
+    setNoteSent(i);
+    fetch('/api/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: i }),
     }).catch(() => undefined);
   };
   const restart = () => {
@@ -326,7 +352,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
 
   const press = useCallback(
     (m: number) => {
-      if (finished || moves.length >= MAX_TICKS) return;
+      if (finished || moves.length >= MAX_TICKS || lockRef.current) return;
       if (sound) beep(m === 0 ? 300 : 420, 70);
       setMoves((v) => v + m);
     },
@@ -353,7 +379,10 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
       body: JSON.stringify({ moves, ghostId: st.ghost.id }),
     })
       .then((r) => r.json())
-      .then((j) => setRes(j.ok ? j : { humans: 0, streak: 0, failed: true }))
+      .then((j) => {
+        setRes(j.ok ? j : { humans: 0, streak: 0, failed: true });
+        if (j.ok) onRefresh?.();
+      })
       .catch(() => setRes({ humans: 0, streak: 0, failed: true }));
     // Only send once, when the level is finished.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,7 +411,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
         : onPlate(cellAt(pt))
           ? 'Your partner is holding a door open for you. Go through it.'
           : moves.length >= 12
-            ? 'Stuck? Try waiting a step so your partner gets into place. Restart is free.'
+            ? `Stuck? Try waiting a step so your partner gets into place.${tutorial?.name === 'Level' ? '' : ' Restart is free.'}`
             : level.cells.some((r) => r.includes('T'))
               ? 'Silver gates open for two steps, then close for two. Time your crossing to the beat.'
               : 'A door opens only while your partner stands on its plate.';
@@ -454,13 +483,17 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
 
       {wordMode && (
         <div className="wordbox">
+          {!tutorial && st.ghost.note !== undefined && st.ghost.note >= 0 && (
+            <div className="note">u/{st.ghost.user} left you a note: “{NOTES[st.ghost.note]}”</div>
+          )}
           <div className="wordbar">
             {slotView.map((v, i) => (
-              <span key={i} className={v.by ? `slot ${v.by}` : 'slot'}>{v.by ? v.c : '_'}</span>
+              <span key={i} className={v.by ? `slot ${v.by}` : hinted(i) ? 'slot hint' : 'slot'}>{v.by ? v.c : hinted(i) ? v.c : '_'}</span>
             ))}
           </div>
           <div className="hint">Riddle: {word[1]}</div>
-          {jam && <div className="hint jam">Wrong letter! The word is jammed. Restart to try again.</div>}
+          {jam && <div className="hint jam">Wrong letter! The word is jammed. Press restart to try again.</div>}
+          {!finished && hints < 2 && <button className="tab" onClick={() => setHints((h) => h + 1)}>Hint ({2 - hints} left)</button>}
         </div>
       )}
       <div className={finished ? 'board won' : 'board'} style={{ aspectRatio: `${cols} / ${rows}` }}>
@@ -501,7 +534,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
       {!finished && (
         <>
           <div className="hint">{hintText}</div>
-          {noHeart && <div className="hint jam">No hearts left. One comes back every 15 minutes, and a 3 star clear gives one back.</div>}
+          {noHeart && <div className="hint jam">No hearts left. One comes back every 30 minutes, and a 3 star clear gives one back.</div>}
           <div className="pad">
             <span />
             <button onClick={() => press(1)}>↑</button>
@@ -511,7 +544,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
             <button onClick={() => press(4)}>→</button>
             <span />
             <button onClick={() => press(2)}>↓</button>
-            <button onClick={restart}>restart</button>
+            <button className={jam ? 'main' : undefined} onClick={restart}>restart</button>
           </div>
         </>
       )}
@@ -558,8 +591,24 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
               {st.thanks > 0 && <div className="hint">Thank-yous from partners: {st.thanks}</div>}
               {st.recent.length > 0 && <div className="hint">Latest: {st.recent.map((u) => 'u/' + u).join(', ')}</div>}
               <div className="hint">Your run is now someone's yestermate. Come back tomorrow to see who used it.</div>
-              <div className="hint">{wordDone ? `Word found: ${word[0]}. You and your yestermate spelled it together.` : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${got.filter((g) => !g.decoy && !g.by).length} letters missed.`}</div>
+              <div className="hint">{wordDone ? `Word found: ${word[0]}. You and your yestermate spelled it together.` : `Word: ${slotView.map((v) => (v.by ? v.c : '_')).join(' ')}. ${missed} letter${missed === 1 ? '' : 's'} missed.`}</div>
               {!res.practice && <Chain partners={st.partners} joined />}
+              {!res.practice && (
+                <div>
+                  {noteSent === null ? (
+                    <>
+                      <div className="hint">Leave a note for the next stranger:</div>
+                      <div className="chips">
+                        {NOTES.map((n, i) => (
+                          <button key={i} className="chip" onClick={() => sendNote(i)}>{n}</button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="hint">Note sent: “{NOTES[noteSent]}” The next stranger will read it.</div>
+                  )}
+                </div>
+              )}
               <div className="two">
                 <button onClick={copyResult}>{copied === 'ok' ? 'Copied' : 'Copy result'}</button>
                 {!res.practice && (
@@ -611,7 +660,7 @@ function Tutorial({ lessons, onDone, name, endLabel }: { lessons: Plan[]; onDone
   const st = useMemo<St>(() => {
     const sol = solve(parse(t.rows))!;
     const ghost = { id: 'tutorial', moves: t.role === 'A' ? sol.b : sol.a, user: 'bot' };
-    return { day: t.day ?? 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0, yesterday: null, stats: { dailyStars: 0, dailyThree: 0, journey: [] }, community: { wins: 0, links: 0, streak: 0, goal: 10 }, avatar: null, weekly: { level: 0, best: null, top: [] }, hearts: { n: 5, nextIn: 0 } };
+    return { day: t.day ?? 0, rows: t.rows, role: t.role, ghost, humans: 0, played: false, streak: 0, uses: 0, top: [], tutorialDone: true, recent: [], partners: [], thanks: 0, yesterday: null, stats: { dailyStars: 0, dailyThree: 0, journey: [] }, community: { wins: 0, links: 0, streak: 0, goal: 10 }, avatar: null, weekly: { level: 0, best: null, top: [] }, hearts: { n: 5, nextIn: 0 }, seen: [] };
   }, [t]);
   const next = () => (i + 1 < lessons.length ? setI(i + 1) : onDone());
   return <Game key={i} st={st} tutorial={{ n: i + 1, total: lessons.length, tip: t.tip, onNext: next, name, endLabel }} />;
@@ -624,6 +673,12 @@ const WORLDS = [
   { name: 'Gate rhythm', tag: 'Hard' },
   { name: 'Deep vaults', tag: 'Hard' },
   { name: 'The Echo', tag: 'Expert' },
+  { name: 'Season 2: Moonrise', tag: 'Medium' },
+  { name: 'Long shadows', tag: 'Medium' },
+  { name: 'Mirror halls', tag: 'Hard' },
+  { name: 'Storm gates', tag: 'Hard' },
+  { name: 'Echo vault', tag: 'Expert' },
+  { name: 'The last path', tag: 'Expert' },
 ];
 const WORLD_SIZE = 15;
 
@@ -743,7 +798,7 @@ function WeeklyView({ st, onPlay, onBack }: { st: St; onPlay: () => void; onBack
   );
 }
 
-function App() {
+function App({ onState }: { onState: (s: St) => void }) {
   const [st, setSt] = useState<St | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -764,6 +819,15 @@ function App() {
       .then(setSt)
       .catch(() => setFailed(true));
   }, [attempt]);
+  useEffect(() => {
+    if (st) onState(st);
+  }, [st, onState]);
+  const refreshProgress = () => {
+    fetch('/api/progress')
+      .then((r) => r.json())
+      .then((j) => setSt((p) => (p ? { ...p, ...j } : p)))
+      .catch(() => undefined);
+  };
   const retry = () => {
     setFailed(false);
     setAttempt((n) => n + 1);
@@ -849,10 +913,44 @@ function App() {
   const list = st.partners;
   const chosen = pick >= 0 ? list[pick] : undefined;
   const dst: St = chosen
-    ? { ...st, role: chosen.role === 'A' ? 'B' : 'A', ghost: { id: chosen.id, moves: chosen.moves, user: chosen.user, at: chosen.at } }
+    ? { ...st, role: chosen.role === 'A' ? 'B' : 'A', ghost: { id: chosen.id, moves: chosen.moves, user: chosen.user, at: chosen.at, note: chosen.note } }
     : st;
   const nextPartner = () => setPick((p) => ((p < 0 ? list.length - 1 : p) + 1) % list.length);
-  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} onJourney={() => setJmap(true)} onWeekly={() => setWview(true)} {...(st.partners.length > 1 ? { onChoose: () => setPlist(true) } : {})} {...(st.yesterday ? { onYesterday: () => setYday(true) } : {})} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
+  return <Game key={dst.ghost.id} st={dst} onBonus={() => setBonus(true)} onRefresh={refreshProgress} onJourney={() => setJmap(true)} onWeekly={() => setWview(true)} {...(st.partners.length > 1 ? { onChoose: () => setPlist(true) } : {})} {...(st.yesterday ? { onYesterday: () => setYday(true) } : {})} {...(list.length > 1 ? { onPartner: nextPartner } : {})} />;
+}
+
+function BadgePopup({ names, onClose }: { names: string[]; onClose: () => void }) {
+  return (
+    <div className="pop" onClick={onClose}>
+      <div className="popcard" onClick={(e) => e.stopPropagation()}>
+        <Confetti />
+        <div className="big">{names.length > 1 ? 'New badges!' : 'New badge!'}</div>
+        {names.map((n) => (
+          <span key={n} className="bdg on">{n}</span>
+        ))}
+        <button className="main" onClick={onClose}>Nice!</button>
+      </div>
+    </div>
+  );
+}
+
+function Root() {
+  const [pop, setPop] = useState<string[]>([]);
+  const known = useRef<string[] | null>(null);
+  const check = useCallback((s: St) => {
+    if (known.current === null) known.current = s.seen ?? [];
+    const fresh = earnedNames(metricsOf(s)).filter((n) => !known.current!.includes(n));
+    if (fresh.length === 0) return;
+    known.current = [...known.current, ...fresh];
+    setPop(fresh);
+    fetch('/api/badges/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names: fresh }) }).catch(() => undefined);
+  }, []);
+  return (
+    <>
+      <App onState={check} />
+      {pop.length > 0 && <BadgePopup names={pop} onClose={() => setPop([])} />}
+    </>
+  );
 }
 
 const style = document.createElement('style');
@@ -861,6 +959,6 @@ document.head.appendChild(style);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Root />
   </StrictMode>
 );

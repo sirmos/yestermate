@@ -36,4 +36,10 @@ export const WORDS: [string, string][] = [
   ['FRIEND', 'Someone who walks your path with you.'],
   ['MATE', 'A partner, like the one who played before you.'],
   ['PATH', 'A stranger left me for you.'],
+  ['KEY', 'I open doors, but I have no hands.'],
+  ['MAP', 'I show the way, but I have no legs.'],
+  ['SUN', 'I rise every morning without an alarm.'],
+  ['ICE', 'I am water that stands still in the cold.'],
+  ['OAK', 'I start as a nut and grow into a tree.'],
+  ['OWL', 'I am awake while you sleep, and I ask who.'],
 ];

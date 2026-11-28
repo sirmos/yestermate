@@ -3,8 +3,10 @@
 import { parse, solve, step, start } from '../src/shared/sim.ts';
 import { writeFileSync } from 'node:fs';
 
-const journey = process.env.JOURNEY === '1';
-let seed = journey ? 777001 : 20261111;
+const mode = process.env.JOURNEY;
+const journey = mode === '1' || mode === '2';
+const minTicks = mode === '2' ? 11 : 9;
+let seed = mode === '2' ? 888002 : journey ? 777001 : 20261111;
 const rnd = () => {
   seed = (seed + 0x6d2b79f5) | 0;
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -79,7 +81,7 @@ for (let i = 0; i < (journey ? 52000 : 70000); i++) {
   const sol = solve(l);
   if (!sol) continue;
   const ticks = sol.a.length;
-  if (ticks < 9 || ticks > 40) continue;
+  if (ticks < minTicks || ticks > 40) continue;
   if (solo(l, 'A') || solo(l, 'B')) continue;
   found.set(id, { rows, ticks });
 }
@@ -108,8 +110,8 @@ for (const rows of levels) {
 
 const body = levels.map((r) => '  [\n' + r.map((x) => `    '${x}',`).join('\n') + '\n  ],').join('\n');
 writeFileSync(
-  new URL(`../src/shared/${journey ? 'journey' : 'levels'}.ts`, import.meta.url),
-  `// Made by tools/gen-levels.mjs. Do not edit by hand.\n// A, B = spawns. g = goal for A. h = goal for B. x, y, z = plates. X, Y, Z = doors. T = silver gate.\nexport const ${journey ? 'JOURNEY' : 'LEVELS'}: string[][] = [\n${body}\n];\n`
+  new URL(`../src/shared/${mode === '2' ? 'journey2' : journey ? 'journey' : 'levels'}.ts`, import.meta.url),
+  `// Made by tools/gen-levels.mjs. Do not edit by hand.\n// A, B = spawns. g = goal for A. h = goal for B. x, y, z = plates. X, Y, Z = doors. T = silver gate.\nexport const ${mode === '2' ? 'JOURNEY2' : journey ? 'JOURNEY' : 'LEVELS'}: string[][] = [\n${body}\n];\n`
 );
 console.log('gated', levels.filter((r) => r.join('').includes('T')).length);
 console.log('wide', levels.filter((r) => r[0].length === 11).length, 'doors3', levels.filter((r) => r.join('').includes('Z')).length);
