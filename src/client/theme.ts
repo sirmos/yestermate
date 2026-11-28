@@ -58,4 +58,7 @@ body[data-env=frost]{--c1:#3b4f66;--c2:#2f4258;--glow:#35506e}
 .board{width:min(100%,calc(40vh * var(--r,1.5)));width:min(100%,calc(40dvh * var(--r,1.5)));margin:0 auto}
 @media (max-height:700px){.w{gap:8px;padding:10px}.pad button{padding:7px 0;font-size:15px}.hint{font-size:13px}.slot{width:30px;height:34px;font-size:17px}.logo{font-size:18px}.card{padding:12px}.wordbox{gap:4px}}
 @media (max-height:560px){.w.playing .hint:not(.jam){display:none}.pad{gap:4px}.pad button{padding:5px 0}.slot{width:26px;height:30px;font-size:15px}}
+.glyph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#ffffff;text-shadow:0 1px 3px rgba(0,0,0,.85);pointer-events:none}
+body.calm *{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 `;

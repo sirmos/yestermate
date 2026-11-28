@@ -238,6 +238,8 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const lockRef = useRef(false);
   const [light, setLight] = useState(() => document.body.classList.contains('light'));
   const toggleTheme = () => setLight(document.body.classList.toggle('light'));
+  const [symbols, setSymbols] = useState(() => document.body.classList.contains('symbols'));
+  const [calm, setCalm] = useState(() => document.body.classList.contains('calm'));
   const [tries, setTries] = useState(0);
   const [sound, setSoundRaw] = useState(soundOn);
   const [music, setMusicRaw] = useState(musicOn);
@@ -477,6 +479,12 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
             <button className="tab" onClick={toggleTheme}>{light ? 'Light mode' : 'Dark mode'}</button>
           </label>
           <label>
+            <button className="tab" onClick={() => setSymbols(document.body.classList.toggle('symbols'))}>{symbols ? 'Symbols on' : 'Symbols off'}</button>
+          </label>
+          <label>
+            <button className="tab" onClick={() => setCalm(document.body.classList.toggle('calm'))}>{calm ? 'Calm motion on' : 'Calm motion off'}</button>
+          </label>
+          <label>
             <button className="tab" onClick={() => setMusicState(!music)}>{music ? 'Music on' : 'Music off'}</button>
             <input type="range" min="0" max="1" step="0.05" value={mus} onChange={(e) => { musicVol = Number(e.target.value); setMus(musicVol); setMusicVol(musicVol); }} />
           </label>
@@ -515,6 +523,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
                 return (
                   <div key={`${x}-${y}`} className={(ch === '#' ? 'c wall' : 'c') + (ask ? ' ask' : '')}>
                     {isPlate && <div className="plate" style={{ borderColor: k, background: pressed ? k : 'transparent' }} />}
+                    {symbols && (isPlate || isDoor) && <span className="glyph">{'123'['xyz'.indexOf(ch.toLowerCase())]}</span>}
                     {Lt && !Lt.by && <div className="ltr">{Lt.ch}</div>}
                     {isGate && <div className="door gate" style={{ opacity: sim.t % 4 < 2 ? 0.15 : 1 }} />}
                     {isDoor && <div className="door" style={{ background: k, opacity: doorOpacity(ch) }} />}
@@ -675,7 +684,7 @@ const WORLDS = [
   { name: 'Gate rhythm', tag: 'Hard' },
   { name: 'Deep vaults', tag: 'Hard' },
   { name: 'The Echo', tag: 'Expert' },
-  { name: 'Season 2: Moonrise', tag: 'Medium' },
+  { name: 'Moonrise', tag: 'Medium' },
   { name: 'Long shadows', tag: 'Medium' },
   { name: 'Mirror halls', tag: 'Hard' },
   { name: 'Storm gates', tag: 'Hard' },
@@ -699,7 +708,7 @@ function JourneyMap({ st, onPick, onBack }: { st: St; onPick: (i: number) => voi
       <div className="hint">
         ♥ {st.hearts.n}/5{st.hearts.n < 5 ? `, next heart in ${Math.ceil(st.hearts.nextIn / 60)} min` : ''}. Restarting a level costs a heart. A 3 star clear gives one back.
       </div>
-      <div className="hint">Level {frontier + 1} is next. {m.stars} stars so far. The Journey never ends: new worlds appear as you climb.</div>
+      <div className="hint">Level {frontier + 1} is next. {m.stars} stars so far. New worlds unlock as you progress.</div>
       {Array.from({ length: current + 2 }, (_, k) => {
         const w = WORLDS[k % WORLDS.length]!;
         const round = Math.floor(k / WORLDS.length);
@@ -708,7 +717,7 @@ function JourneyMap({ st, onPick, onBack }: { st: St; onPick: (i: number) => voi
         return (
           <div key={k}>
             <div className="world">
-              <b>World {k + 1}: {w.name}{round > 0 ? ` (mirror ${round})` : ''}</b>
+              <b>World {k + 1}: {w.name}{round > 0 ? ` · Chapter ${round + 1}` : ''}</b>
               <span>{w.tag} · {count}/{WORLD_SIZE}</span>
             </div>
             {k <= current ? (
