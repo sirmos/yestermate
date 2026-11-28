@@ -7,7 +7,7 @@ import { ENVS, themeCss } from './theme';
 import { Badges, badgeCss, earnedNames, metricsOf, type Metrics, type Stats } from './badges';
 import { JOURNEY } from '../shared/journey';
 import { setMusic as setMusicEngine, setMusicVol } from './music';
-import { MAX_TICKS, minSteps, parse, pickWord, placeLetters, replay, solve, trail, type Role } from '../shared/sim';
+import { MAX_TICKS, minSteps, parse, pickWord, placeLetters, replay, solve, trail, variantRows, type Role } from '../shared/sim';
 import { WORDS } from '../shared/words';
 import { LEVELS } from '../shared/levels';
 
@@ -277,7 +277,9 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
   const slotView = [...word[0]].map((c, i) => ({ c, by: got.find((g) => g.slot === i)?.by ?? '' }));
   const wordShown = slotView.map((v) => (v.by ? v.c : '_')).join('');
   const jam = got.some((g) => g.decoy && g.by === 'me');
-  lockRef.current = jam;
+  useEffect(() => {
+    lockRef.current = jam;
+  }, [jam]);
   const missed = got.filter((g) => !g.decoy && !g.by).length;
   const hinted = (i: number) => (hints >= 1 && i === 0) || (hints >= 2 && i === word[0].length - 1);
   const wordDone = got.some((g) => !g.decoy) && got.filter((g) => !g.decoy).every((g) => g.by) && !jam;
@@ -458,7 +460,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
       <div className="top">
         <span className="logo">Yester<b>mate</b></span>
         <span className="steps">
-          {tutorial ? (tutorial.total === 1 ? (tutorial.name ?? 'Lesson') : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}`) + (tutorial.name === 'Level' ? ` · ♥ ${st.hearts.n}` : '') : `${diff} · Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
+          {tutorial ? (tutorial.total === 1 ? (tutorial.name ?? 'Lesson') : tutorial.name === 'Level' ? `Level ${tutorial.n}` : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total}`) + (tutorial.name === 'Level' ? ` · ♥ ${st.hearts.n}` : '') : `${diff} · Step ${moves.length}${par ? ` · Par ${par}` : ''}`}
         </span>
       </div>
       <div className="top chrome">
@@ -496,7 +498,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
           {!finished && hints < 2 && <button className="tab" onClick={() => setHints((h) => h + 1)}>Hint ({2 - hints} left)</button>}
         </div>
       )}
-      <div className={finished ? 'board won' : 'board'} style={{ aspectRatio: `${cols} / ${rows}` }}>
+      <div className={finished ? 'board won' : 'board'} style={{ aspectRatio: `${cols} / ${rows}`, ['--r' as string]: cols / rows } as CSSProperties}>
         <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
           {level.cells.slice(1, -1).flatMap((row, y) =>
             row
@@ -557,7 +559,7 @@ function Game({ st, tutorial, onBonus, onPartner, onYesterday, onJourney, onChoo
               <div className="big">Nice!</div>
               <Stars n={nStars} />
               {wordMode && <div className="hint">{wordLine} Stars: 1 finish, 2 spell the word, 3 few steps.</div>}
-              <div className="hint">{tutorial.total === 1 ? 'Done' : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total} done`} in {moves.length} steps. Par is {par}.</div>
+              <div className="hint">{tutorial.total === 1 ? 'Done' : tutorial.name === 'Level' ? `Level ${tutorial.n} done` : `${tutorial.name ?? 'Lesson'} ${tutorial.n} of ${tutorial.total} done`} in {moves.length} steps. Par is {par}.</div>
               <button onClick={tutorial.onNext}>{tutorial.n === tutorial.total ? (tutorial.endLabel ?? "Start today's level") : `Next ${(tutorial.name ?? 'lesson').toLowerCase()}`}</button>
               {tutorial.onBack && <button onClick={tutorial.onBack}>Level map</button>}
             </>
@@ -685,9 +687,9 @@ const WORLD_SIZE = 15;
 function JourneyMap({ st, onPick, onBack }: { st: St; onPick: (i: number) => void; onBack: () => void }) {
   const done = st.stats.journey;
   const m: Metrics = metricsOf(st);
-  const frontier = JOURNEY.findIndex((_, i) => !(done[i] ?? 0));
-  const finished = frontier === -1;
-  const current = finished ? WORLDS.length - 1 : Math.floor(frontier / WORLD_SIZE);
+  const firstOpen = done.findIndex((v) => !(v ?? 0));
+  const frontier = firstOpen === -1 ? done.length : firstOpen;
+  const current = Math.floor(frontier / WORLD_SIZE);
   return (
     <div className="w">
       <div className="top">
@@ -697,28 +699,21 @@ function JourneyMap({ st, onPick, onBack }: { st: St; onPick: (i: number) => voi
       <div className="hint">
         ♥ {st.hearts.n}/5{st.hearts.n < 5 ? `, next heart in ${Math.ceil(st.hearts.nextIn / 60)} min` : ''}. Restarting a level costs a heart. A 3 star clear gives one back.
       </div>
-      {finished ? (
-        <div className="card">
-          <div className="big">Journey complete!</div>
-          <div className="hint">You cleared all {JOURNEY.length} levels. Chase three stars on every level, take on the Weekly Boss, and keep your daily streak going.</div>
-        </div>
-      ) : (
-        <div className="hint">Level {frontier + 1} is next. {m.stars} stars so far. Clear a level to unlock the one after it.</div>
-      )}
-      {WORLDS.map((w, k) => {
+      <div className="hint">Level {frontier + 1} is next. {m.stars} stars so far. The Journey never ends: new worlds appear as you climb.</div>
+      {Array.from({ length: current + 2 }, (_, k) => {
+        const w = WORLDS[k % WORLDS.length]!;
+        const round = Math.floor(k / WORLDS.length);
         const from = k * WORLD_SIZE;
-        const to = Math.min(JOURNEY.length, from + WORLD_SIZE);
-        if (from >= JOURNEY.length) return null;
-        const count = done.slice(from, to).filter((v) => (v ?? 0) > 0).length;
+        const count = done.slice(from, from + WORLD_SIZE).filter((v) => (v ?? 0) > 0).length;
         return (
-          <div key={w.name}>
+          <div key={k}>
             <div className="world">
-              <b>World {k + 1}: {w.name}</b>
-              <span>{w.tag} · {count}/{to - from}</span>
+              <b>World {k + 1}: {w.name}{round > 0 ? ` (mirror ${round})` : ''}</b>
+              <span>{w.tag} · {count}/{WORLD_SIZE}</span>
             </div>
             {k <= current ? (
               <div className="map">
-                {JOURNEY.slice(from, to).map((_, j) => {
+                {Array.from({ length: WORLD_SIZE }, (_, j) => {
                   const i = from + j;
                   const stars = done[i] ?? 0;
                   const open = i === 0 || (done[i - 1] ?? 0) > 0;
@@ -743,7 +738,7 @@ function JourneyMap({ st, onPick, onBack }: { st: St; onPick: (i: number) => voi
 }
 
 function JourneyPlay({ level, base, onBack, onNext, onSaved, onHearts, weekly = false }: { level: number; base: St; onBack: () => void; onNext: () => void; onSaved: (j: number[]) => void; onHearts: (h: { n: number; nextIn: number }) => void; weekly?: boolean }) {
-  const rows = JOURNEY[level]!;
+  const rows = useMemo(() => variantRows(JOURNEY[level % JOURNEY.length]!, Math.floor(level / JOURNEY.length)), [level]);
   const role: Role = weekly ? 'A' : level % 2 ? 'B' : 'A';
   const sol = useMemo(() => solve(parse(rows))!, [rows]);
   const st = useMemo<St>(
@@ -770,7 +765,7 @@ function JourneyPlay({ level, base, onBack, onNext, onSaved, onHearts, weekly = 
       });
   const lesson: Lesson = weekly
     ? { n: 1, total: 1, tip: 'Weekly Boss. Fewest steps wins the week.', name: 'Weekly Boss', endLabel: 'Back', onNext: onBack, onBack, onWin }
-    : { n: level + 1, total: JOURNEY.length, tip: `Level ${level + 1}. Your partner is a bot.`, name: 'Level', endLabel: 'Back to the map', onNext, onBack, onWin, onSpend };
+    : { n: level + 1, total: 1000000, tip: `Level ${level + 1}. Your partner is a bot.`, name: 'Level', endLabel: 'Back to the map', onNext, onBack, onWin, onSpend };
   return <Game key={level} st={st} tutorial={lesson} />;
 }
 
@@ -884,7 +879,7 @@ function App({ onState }: { onState: (s: St) => void }) {
         level={jlevel}
         base={st}
         onBack={() => setJlevel(null)}
-        onNext={() => setJlevel(jlevel + 1 < JOURNEY.length ? jlevel + 1 : null)}
+        onNext={() => setJlevel(jlevel + 1)}
         onSaved={(journey) => setSt((p) => (p ? { ...p, stats: { ...p.stats, journey } } : p))}
         onHearts={(h) => setSt((p) => (p ? { ...p, hearts: h } : p))}
       />

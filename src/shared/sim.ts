@@ -310,3 +310,12 @@ export function pickWord(l: Level, words: [string, string][], index: number): [s
   }
   return words.reduce((a, b) => (b[0].length < a[0].length ? b : a));
 }
+
+// Mirrored copies of a level are as solvable as the original, so the Journey can keep going.
+export function variantRows(rows: string[], season: number): string[] {
+  const v = season % 4;
+  let out = rows;
+  if (v === 1 || v === 3) out = out.map((r) => [...r].reverse().join(''));
+  if (v === 2 || v === 3) out = [...out].reverse();
+  return out;
+}

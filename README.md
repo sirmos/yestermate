@@ -22,7 +22,7 @@ If your yestermate is stuck at a door, the door and the ring it needs glow. It w
 
 - **Daily level** with a new riddle every day, plus a difficulty label from Easy to Expert.
 - **Yesterday's puzzle**, played with yesterday's last stranger.
-- **Journey**: 180 levels in two seasons, unlocked in order, with a bot partner and 1 to 3 stars saved to your account.
+- **Journey**: an endless level map. 180 checked levels return as mirrored worlds, so it never runs out, unlocked in order, with a bot partner and 1 to 3 stars saved to your account.
 - **Weekly Boss**: one hard level for the whole week, with a fewest steps leaderboard.
 - **Bonus puzzles** with a bot after your daily level.
 - **Stars**: 1 for finishing, 1 for spelling the secret word with no wrong letter, 1 for finishing in few steps.
@@ -47,7 +47,7 @@ Each new player takes the role of the run before the last one, so copying that o
 ## Content
 
 - 36 daily levels, each with its own secret word and riddle.
-- 180 Journey levels in two seasons, plus a new Weekly Boss every 7 days.
+- 180 Journey levels that come back mirrored forever, plus a new Weekly Boss every 7 days.
 - All levels were made by a generator and checked by a solver. Tests confirm each one can be won in both roles and cannot be finished without help.
 
 ## Reliability

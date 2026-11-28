@@ -3,7 +3,7 @@
 // @ts-nocheck
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_TICKS, minSteps, parse, pickWord, placeLetters, solve, start, step, trail, validate, type Level } from './sim.ts';
+import { MAX_TICKS, minSteps, parse, pickWord, variantRows, placeLetters, solve, start, step, trail, validate, type Level } from './sim.ts';
 import { LEVELS } from './levels.ts';
 import { JOURNEY } from './journey.ts';
 import { WORDS } from './words.ts';
@@ -98,5 +98,16 @@ test('every daily word fits on its level and can be partly collected on the solv
     const got = letters.filter((x) => [...t.a, ...t.b].some((p) => p.x === x.x && p.y === x.y)).length;
     assert.ok(got >= 1, `day ${day}: no letter on the route`);
     assert.ok(letters.every((q) => q.d <= 3), `day ${day}: a letter is too far from the route`);
+  }
+});
+
+test('mirrored journey levels stay solvable in both roles', () => {
+  for (let i = 0; i < JOURNEY.length; i += 5) {
+    for (let season = 1; season < 4; season++) {
+      const l = parse(variantRows(JOURNEY[i]!, season));
+      const s = solve(l);
+      assert.ok(s, `journey ${i} mirror ${season} has no solution`);
+      assert.ok(validate(l, 'A', s.a, s.b).won && validate(l, 'B', s.b, s.a).won, `journey ${i} mirror ${season} fails`);
+    }
   }
 });

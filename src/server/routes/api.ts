@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { context, reddit, redis } from '@devvit/web/server';
 import { LEVELS } from '../../shared/levels';
 import { JOURNEY } from '../../shared/journey';
-import { minSteps, parse, pickWord, replay, solve, validate, wordStars, type Role } from '../../shared/sim';
+import { minSteps, parse, pickWord, replay, solve, validate, variantRows, wordStars, type Role } from '../../shared/sim';
 import { WORDS } from '../../shared/words';
 
 export const api = new Hono();
@@ -224,7 +224,10 @@ api.post('/thanks', async (c) => {
 api.post('/journey', async (c) => {
   const user = await who();
   const body = await c.req.json<{ level: number; moves: string }>();
-  const rows = JOURNEY[body.level];
+  const rows =
+    Number.isInteger(body.level) && body.level >= 0 && body.level < 100000
+      ? variantRows(JOURNEY[body.level % JOURNEY.length]!, Math.floor(body.level / JOURNEY.length))
+      : undefined;
   if (!rows) return c.json({ ok: false }, 400);
   const stats = await getStats(user);
   if (body.level > 0 && !(stats.journey[body.level - 1] ?? 0)) return c.json({ ok: false }, 400);

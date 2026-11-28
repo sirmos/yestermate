@@ -55,4 +55,7 @@ body[data-env=frost]{--c1:#3b4f66;--c2:#2f4258;--glow:#35506e}
 .pop{position:fixed;inset:0;background:rgba(8,10,16,.72);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
 .popcard{position:relative;overflow:hidden;background:linear-gradient(160deg,#2b3150,#202435);border:1px solid rgba(242,184,75,.5);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 40px rgba(242,184,75,.25);animation:rise .35s ease;color:#ece8df}
 .popcard .bdg{font-size:15px;padding:7px 14px}
+.board{width:min(100%,calc(40vh * var(--r,1.5)));width:min(100%,calc(40dvh * var(--r,1.5)));margin:0 auto}
+@media (max-height:700px){.w{gap:8px;padding:10px}.pad button{padding:7px 0;font-size:15px}.hint{font-size:13px}.slot{width:30px;height:34px;font-size:17px}.logo{font-size:18px}.card{padding:12px}.wordbox{gap:4px}}
+@media (max-height:560px){.w.playing .hint:not(.jam){display:none}.pad{gap:4px}.pad button{padding:5px 0}.slot{width:26px;height:30px;font-size:15px}}
 `;
